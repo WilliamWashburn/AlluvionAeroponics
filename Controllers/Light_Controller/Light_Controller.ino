@@ -72,10 +72,11 @@ void setup() {
   Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
-  connectToBroker();
-  mqttClient.onMessage(onMqttMessage);  // set the message receive callback
-  subscriptToTopics();
-
+  if (!connectToBroker()) {
+    pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
+    pixels.show();                                    // Send the updated pixel colors to the hardware.
+  }
+  
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
   ebbNFlowAlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnEbbNFlowLightsOn);     // 1:00am every day
@@ -115,7 +116,12 @@ long convertTimeToSecondsAfterMidnight(char hourTime[], char minuteTime[], char 
 
 void loop() {
   checkWifiConnection();
-  checkHomeassistantConnection();
+
+  if (checkBrokerConnection()) {
+    pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
+    pixels.show();                                    // Send the updated pixel colors to the hardware.
+  }
+
   Alarm.delay(0);  //needed to service alarms
 
   // call poll() regularly to allow the library to receive MQTT messages and
@@ -273,31 +279,5 @@ void checkWifiConnection() {
       pixels.setPixelColor(0, pixels.Color(0, 10, 0));
       pixels.show();  // Send the updated pixel colors to the hardware.
     }
-  }
-}
-
-void checkHomeassistantConnection() {
-  if (!mqttClient.connected()) {
-    pixels.setPixelColor(0, pixels.Color(20, 0, 0));
-    pixels.show();  // Send the updated pixel colors to the hardware.
-    if (!mqttClient.connect(broker, port)) {
-      Serial.print("MQTT connection failed! Error code = ");
-      Serial.println(mqttClient.connectError());
-
-    }
-    Serial.println("You're connected to the MQTT broker!");
-    Serial.println();
-    pixels.setPixelColor(0, pixels.Color(0, 10, 0));
-    pixels.show();  // Send the updated pixel colors to the hardware.
-    // set the message receive callback
-    mqttClient.onMessage(onMqttMessage);
-    Serial.print("Subscribing to topic: ");
-    Serial.println(topic);
-    Serial.println();
-    // subscribe to a topic
-    mqttClient.subscribe(topic);
-  }
-  else {
-    Serial.println("still connected");
   }
 }
