@@ -67,7 +67,7 @@ void setup() {
   configTime(0, 0, NTP_SERVER);  // See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
   setenv("TZ", TZ_INFO, 1);
   getNTPtime(10);
-  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mon + 1, timeinfo.tm_mday, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
+  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday, timeinfo.tm_mon + 1, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
   Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
   Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
