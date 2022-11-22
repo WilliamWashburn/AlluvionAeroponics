@@ -72,6 +72,7 @@ void setup() {
   Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
+  mqttClient.onMessage(onMqttMessage);  // set the message receive callback
   if (!connectToBroker()) {
     pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
     pixels.show();                                    // Send the updated pixel colors to the hardware.
