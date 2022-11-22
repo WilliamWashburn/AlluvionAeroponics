@@ -6,6 +6,7 @@
 #include <TimeAlarms.h>
 #include <ArduinoMqttClient.h>
 
+
 //WIFI
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
@@ -14,6 +15,8 @@ WiFiClient wifiClient;
 
 //NTP
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -14400, 60000);  //we are -5 UTC for EST and -4 UTC for EDT. This is -18000 and -14400 seconds (instead of hours)
+const char* NTP_SERVER = "ch.pool.ntp.org";
+const char* TZ_INFO    = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00";  // enter your time zone (https://remotemonitoringsystems.ca/time-zone-abbreviations.php)
 
 //MQTT INFO
 MqttClient mqttClient(wifiClient);
