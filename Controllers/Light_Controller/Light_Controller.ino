@@ -178,20 +178,13 @@ void onMqttMessage(int messageSize) {
   String topic = mqttClient.messageTopic();
   if (topic == "Desoto/Lights/EbbNFlow/command") {
     Serial.println("Should toggle EbbNFlow lights");
-    char message[50];
-    int inx = 0;
-    while (mqttClient.available()) {
-      message[inx] = (char)mqttClient.read();
-      inx++;
-      // Serial.print((char)mqttClient.read());
-    }
-    message[inx] = '\0';  //null terminate
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!ebbNFlowLightsState()) {  //if not on
         turnEbbNFlowLightsOn();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (ebbNFlowLightsState()) {  //if on
         turnEbbNFlowLightsOff();
       }
@@ -199,24 +192,17 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/Lights/Aero2/command") {
     Serial.println("Should toggle Aero2 lights");
-    char message[50];
-    int inx = 0;
-    while (mqttClient.available()) {
-      message[inx] = (char)mqttClient.read();
-      inx++;
-      // Serial.print((char)mqttClient.read());
-    }
-    message[inx] = '\0';  //null terminate
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!row2LightsState()) {  //if not on
         turnRow2LightsOn();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (row2LightsState()) {  //if on
         turnRow2LightsOff();
       }
@@ -224,7 +210,7 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/Lights/EbbNFlow/state") {
     //do nothing
@@ -236,21 +222,13 @@ void onMqttMessage(int messageSize) {
     Serial.println("Should update Aero2 light turn off timing");
 
     //read message
-    char message[50];
-    int inx = 0;
-    while (mqttClient.available()) {
-      message[inx] = (char)mqttClient.read();
-      inx++;
-      // Serial.print((char)mqttClient.read());
-    }
-    message[inx] = '\0';  //null terminate
-
-    Serial.println(message);
+    readMessage();
+    Serial.println(mqttMessage);
 
     //parse
     char hourOff[10];
     char minOff[10];
-    strcpy(hourOff, strtok(message, ":"));
+    strcpy(hourOff, strtok(mqttMessage, ":"));
     strcpy(minOff, strtok(NULL, ":"));
     Serial.println("time parsed - " + String(hourOff) + ":" + String(minOff));
 
@@ -259,22 +237,13 @@ void onMqttMessage(int messageSize) {
   } else if (topic == "Desoto/Lights/Aero2/turnOnTime") {
     Serial.println("Should update Aero2 light turn on timing");
 
-    //read message
-    char message[50];
-    int inx = 0;
-    while (mqttClient.available()) {
-      message[inx] = (char)mqttClient.read();
-      inx++;
-      // Serial.print((char)mqttClient.read());
-    }
-    message[inx] = '\0';  //null terminate
-
-    Serial.println("Received message: " + String(message));
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
 
     //parse
     char hourOff[10];
     char minOff[10];
-    strcpy(hourOff, strtok(message, ":"));
+    strcpy(hourOff, strtok(mqttMessage, ":"));
     strcpy(minOff, strtok(NULL, ":"));
     Serial.println("time parsed - " + String(hourOff) + ":" + String(minOff));
 

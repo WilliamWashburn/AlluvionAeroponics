@@ -8,6 +8,8 @@ const char broker[] = "homeassistant.local";
 int port = 1883;
 const char topic[] = "Desoto/Lights/#";
 
+char mqttMessage[50];
+
 void connectToBroker() {
   Serial.print("Attempting to connect to the MQTT broker: ");
   Serial.println(broker);
@@ -27,4 +29,12 @@ void subscriptToTopics() {
   Serial.print("Subscribing to topic: "); Serial.println(topic); Serial.println();
   // subscribe to a topic
   mqttClient.subscribe(topic);
+void readMessage() {
+  int inx = 0;
+  while (mqttClient.available()) {
+    mqttMessage[inx] = (char)mqttClient.read();
+    inx++;
+    // Serial.print((char)mqttClient.read());
+  }
+  mqttMessage[inx] = '\0';  //null terminate
 }
