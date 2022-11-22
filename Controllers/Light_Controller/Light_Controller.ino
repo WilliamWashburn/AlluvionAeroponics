@@ -47,8 +47,8 @@ void setup() {
   while (millis() - startTime < 60000 && WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    pixels.setPixelColor(0, pixels.Color(0, 0, 10)); //set blue while connecting
-    pixels.show();  // Send the updated pixel colors to the hardware.
+    pixels.setPixelColor(0, pixels.Color(0, 0, 10));  //set blue while connecting
+    pixels.show();                                    // Send the updated pixel colors to the hardware.
   }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("");
@@ -115,6 +115,7 @@ long convertTimeToSecondsAfterMidnight(char hourTime[], char minuteTime[], char 
 
 void loop() {
   checkWifiConnection();
+  checkHomeassistantConnection();
   Alarm.delay(0);  //needed to service alarms
 
   // call poll() regularly to allow the library to receive MQTT messages and
@@ -277,12 +278,17 @@ void checkWifiConnection() {
 
 void checkHomeassistantConnection() {
   if (!mqttClient.connected()) {
+    pixels.setPixelColor(0, pixels.Color(20, 0, 0));
+    pixels.show();  // Send the updated pixel colors to the hardware.
     if (!mqttClient.connect(broker, port)) {
       Serial.print("MQTT connection failed! Error code = ");
       Serial.println(mqttClient.connectError());
+
     }
     Serial.println("You're connected to the MQTT broker!");
     Serial.println();
+    pixels.setPixelColor(0, pixels.Color(0, 10, 0));
+    pixels.show();  // Send the updated pixel colors to the hardware.
     // set the message receive callback
     mqttClient.onMessage(onMqttMessage);
     Serial.print("Subscribing to topic: ");
@@ -290,5 +296,8 @@ void checkHomeassistantConnection() {
     Serial.println();
     // subscribe to a topic
     mqttClient.subscribe(topic);
+  }
+  else {
+    Serial.println("still connected");
   }
 }

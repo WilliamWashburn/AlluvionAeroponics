@@ -27,8 +27,9 @@ void connectToBroker() {
 
 void subscriptToTopics() {
   Serial.print("Subscribing to topic: "); Serial.println(topic); Serial.println();
-  // subscribe to a topic
-  mqttClient.subscribe(topic);
+  mqttClient.subscribe(topic); // subscribe to a topic
+}
+
 void readMessage() {
   int inx = 0;
   while (mqttClient.available()) {
