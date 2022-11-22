@@ -1,3 +1,5 @@
+#include <time.h>
+
 //NTP
 const char* NTP_SERVER = "pool.ntp.org";
 const char* TZ_INFO = "EST5EDT,M3.2.0/2:00:00,M11.1.0/2:00:00";  // https://support.cyberdata.net/portal/en/kb/articles/010d63c0cfce3676151e1f2d5442e311

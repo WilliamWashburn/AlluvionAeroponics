@@ -1,13 +1,9 @@
 #include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
 #include "ntpFunctions.h"
-#include <WiFi.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
+#include "mqttFunctions.h"
 
 #include <TimeLib.h>
 #include <TimeAlarms.h>
-
-#include <ArduinoMqttClient.h>
 
 #include <Adafruit_NeoPixel.h>
 Adafruit_NeoPixel pixels(1, 0, NEO_GRB);
@@ -17,14 +13,7 @@ AlarmId id;
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
 
-WiFiClient wifiClient;
-MqttClient mqttClient(wifiClient);
-
 int lightPins[] = { 4, 26, 25, 13 };
-
-const char broker[] = "homeassistant.local";
-int port = 1883;
-const char topic[] = "Desoto/Lights/#";
 
 AlarmID_t ebbNFlowAlarmOnID;
 AlarmID_t ebbNFlowAlarmOffID;
@@ -58,6 +47,8 @@ void setup() {
   while (millis() - startTime < 60000 && WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    pixels.setPixelColor(0, pixels.Color(0, 0, 10)); //set blue while connecting
+    pixels.show();  // Send the updated pixel colors to the hardware.
   }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("");
@@ -81,25 +72,9 @@ void setup() {
   Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
-  Serial.print("Attempting to connect to the MQTT broker: ");
-  Serial.println(broker);
-  mqttClient.setUsernamePassword(mqttUser, mqttPass);
-  if (!mqttClient.connect(broker, port)) {
-    Serial.print("MQTT connection failed! Error code = ");
-    Serial.println(mqttClient.connectError());
-
-    while (1)
-      ;
-  }
-  Serial.println("You're connected to the MQTT broker!");
-  Serial.println();
-  // set the message receive callback
-  mqttClient.onMessage(onMqttMessage);
-  Serial.print("Subscribing to topic: ");
-  Serial.println(topic);
-  Serial.println();
-  // subscribe to a topic
-  mqttClient.subscribe(topic);
+  connectToBroker();
+  mqttClient.onMessage(onMqttMessage);  // set the message receive callback
+  subscriptToTopics();
 
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
@@ -199,20 +174,6 @@ void turnRow3LightsOff() {
 }
 
 void onMqttMessage(int messageSize) {
-  // // we received a message, print out the topic and contents
-  // Serial.println("Received a message with topic '");
-  // Serial.print(mqttClient.messageTopic());
-  // Serial.print("', length ");
-  // Serial.print(messageSize);
-  // Serial.println(" bytes:");
-
-  // // use the Stream interface to print the contents
-  // while (mqttClient.available()) {
-  //   Serial.print((char)mqttClient.read());
-  // }
-  // Serial.println();
-
-  // Serial.println();
 
   String topic = mqttClient.messageTopic();
   if (topic == "Desoto/Lights/EbbNFlow/command") {
