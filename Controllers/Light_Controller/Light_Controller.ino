@@ -1,4 +1,5 @@
-#include <credentials.h> //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "ntpFunctions.h"
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -15,10 +16,6 @@ AlarmId id;
 
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
-
-WiFiUDP ntpUDP;
-
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -14400, 60000);  //we are -5 UTC for EST and -4 UTC for EDT. This is -18000 and -14400 seconds (instead of hours)
 
 WiFiClient wifiClient;
 MqttClient mqttClient(wifiClient);
@@ -76,13 +73,12 @@ void setup() {
   }
 
   //CONNECT TO NTP
-  timeClient.begin();
-  timeClient.update();
-  Serial.println(timeClient.getFormattedTime());
-  int currentHour = timeClient.getHours();
-  int currentMin = timeClient.getMinutes();
-  int currentSec = timeClient.getSeconds();
-  setTime(currentHour, currentMin, currentSec, 9, 27, 22);  // set time to Saturday 8:29:00am Jan 1 2011
+  configTime(0, 0, NTP_SERVER);  // See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
+  setenv("TZ", TZ_INFO, 1);
+  getNTPtime(10);
+  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mon + 1, timeinfo.tm_mday, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
+  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
+  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
   Serial.print("Attempting to connect to the MQTT broker: ");
@@ -231,11 +227,11 @@ void onMqttMessage(int messageSize) {
     message[inx] = '\0';  //null terminate
     Serial.println(message);
     if (strcmp(message, "{\"state\":\"on\"}") == 0) {
-      if (!ebbNFlowLightsState()) { //if not on
+      if (!ebbNFlowLightsState()) {  //if not on
         turnEbbNFlowLightsOn();
       }
     } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
-      if (ebbNFlowLightsState()) { //if on
+      if (ebbNFlowLightsState()) {  //if on
         turnEbbNFlowLightsOff();
       }
     } else {

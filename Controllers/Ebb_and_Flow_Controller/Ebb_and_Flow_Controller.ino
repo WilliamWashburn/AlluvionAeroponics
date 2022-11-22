@@ -1,4 +1,5 @@
-#include <credentials.h>  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "ntpFunctions.h"
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -6,17 +7,11 @@
 #include <TimeAlarms.h>
 #include <ArduinoMqttClient.h>
 
-
 //WIFI
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
 WiFiUDP ntpUDP;
 WiFiClient wifiClient;
-
-//NTP
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -14400, 60000);  //we are -5 UTC for EST and -4 UTC for EDT. This is -18000 and -14400 seconds (instead of hours)
-const char* NTP_SERVER = "ch.pool.ntp.org";
-const char* TZ_INFO    = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00";  // enter your time zone (https://remotemonitoringsystems.ca/time-zone-abbreviations.php)
 
 //MQTT INFO
 MqttClient mqttClient(wifiClient);
@@ -77,13 +72,12 @@ void setup() {
   }
 
   //CONNECT TO NTP
-  timeClient.begin();
-  timeClient.update();
-  Serial.println(timeClient.getFormattedTime());
-  int currentHour = timeClient.getHours();
-  int currentMin = timeClient.getMinutes();
-  int currentSec = timeClient.getSeconds();
-  setTime(currentHour, currentMin, currentSec, 9, 27, 22);  // set time to Saturday 8:29:00am Jan 1 2011
+  configTime(0, 0, NTP_SERVER);  // See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
+  setenv("TZ", TZ_INFO, 1);
+  getNTPtime(10);
+  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mon + 1, timeinfo.tm_mday, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
+  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
+  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
   Serial.print("Attempting to connect to the MQTT broker: ");
@@ -323,7 +317,7 @@ void waterLevel(int level) {
 
   //turn off solenoid and pump
   digitalWrite(pumpPin, LOW);
-  // delay(1000);  //Relief pressure? Dont know if its a problem really but doesnt hurt
+  // delay(1000);  //Relief pressure? Dont knowTime if its a problem really but doesnt hurt
 
   mqttClient.beginMessage(updateTopic);
   mqttClient.print("starting to drain");
