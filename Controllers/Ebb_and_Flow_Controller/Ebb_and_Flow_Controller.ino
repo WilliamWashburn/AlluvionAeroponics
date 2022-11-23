@@ -1,23 +1,16 @@
 #include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
-#include "ntpFunctions.h"
+#include "mqttFunctions.h"
+
 #include <WiFi.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
+
 #include <TimeLib.h>
 #include <TimeAlarms.h>
+
 #include <ArduinoMqttClient.h>
 
 //WIFI
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
-WiFiUDP ntpUDP;
-WiFiClient wifiClient;
-
-//MQTT INFO
-MqttClient mqttClient(wifiClient);
-const char broker[] = "homeassistant.local";
-int port = 1883;
-const char topic[] = "Desoto/EbbNFlow/#";
 
 //ALARMS
 AlarmID_t watering1AlarmID;
@@ -39,7 +32,6 @@ long levelLastWatered[] = { -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HO
 long levelWaterDurations[] = { 6 * MINTOMILLISEC, 4 * MINTOMILLISEC, 6 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC };                //how long each level should water for
 long levelDrainDurations[] = { 21 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC };             //how long each level should drain for
 int pumpPWMTime = 8000;                                                                                                                                                                  //how long the pump should PWM
-
 
 //---------------SETUP--------------------
 void setup() {
@@ -71,34 +63,9 @@ void setup() {
     Serial.println("Failed to connect to wifi");
   }
 
-  //CONNECT TO NTP
-  configTime(0, 0, NTP_SERVER);  // See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
-  setenv("TZ", TZ_INFO, 1);
-  getNTPtime(10);
-  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday, timeinfo.tm_mon + 1, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
-  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
-  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
-
   //CONNECT TO MQTT BROKER
-  Serial.print("Attempting to connect to the MQTT broker: ");
-  Serial.println(broker);
-  mqttClient.setUsernamePassword(mqttUser, mqttPass);
-  if (!mqttClient.connect(broker, port)) {
-    Serial.print("MQTT connection failed! Error code = ");
-    Serial.println(mqttClient.connectError());
-
-    while (1)
-      ;
-  }
-  Serial.println("You're connected to the MQTT broker!");
-  Serial.println();
-  // set the message receive callback
-  mqttClient.onMessage(onMqttMessage);
-  Serial.print("Subscribing to topic: ");
-  Serial.println(topic);
-  Serial.println();
-  // subscribe to a topic
-  mqttClient.subscribe(topic);
+  mqttClient.onMessage(onMqttMessage);  // set the message receive callback
+  connectToBroker();
 
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
@@ -109,27 +76,12 @@ void setup() {
 
 //--------------LOOP---------------
 void loop() {
-  checkWifiConnection();
   Alarm.delay(0);  //needed to service alarms
 
-  // call poll() regularly to allow the library to receive MQTT messages and
-  // send MQTT keep alives which avoids being disconnected by the broker
-  mqttClient.poll();
+  mqttClient.poll(); // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
 
-  static long lastUpdate = 0;
-  if (millis() - lastUpdate > 5000) {
-    // printInfo();
-    Serial.println("waiting...");
-    lastUpdate = millis();
-  }
-
-  if (!mqttClient.connected()) {
-    Serial.println("MQTT connection lost");
-    if (!mqttClient.connect(broker, port)) {
-      Serial.print("MQTT reconnection error ");
-      Serial.println(mqttClient.connectError());
-    }
-  }
+  if (!mqttClient.connected()) connectToBroker();
+  if (WiFi.status() != WL_CONNECTED) connectToWifi();
 }
 
 void turnOffSolenoids() {
@@ -253,16 +205,7 @@ void waterLevels() {
   for (int i = 1; i <= nbrOfSolenoids; i++) {
     waterLevel(i);
   }
-
-
-  // mqttClient.beginMessage(updateTopic);
-  // mqttClient.print("final draining");
-  // mqttClient.endMessage();
   drainLevels();
-
-  // mqttClient.beginMessage(updateTopic);
-  // mqttClient.print("watering cycle complete");
-  // mqttClient.endMessage();
 }
 
 void pwmPump() {
@@ -301,7 +244,7 @@ void waterLevel(int level) {
   //PWM the pump
   pwmPump();
 
-  //turn pump on and wait
+  //turn solenoid on and wait
   digitalWrite(pumpPin, HIGH);
   long wateringStartTime = millis();
   while (millis() - wateringStartTime < levelWaterDurations[level]) {
@@ -313,11 +256,9 @@ void waterLevel(int level) {
     }
     mqttClient.poll();
   }
-  // delay(levelWaterDurations[level]);
 
-  //turn off solenoid and pump
+  //turn off pump
   digitalWrite(pumpPin, LOW);
-  // delay(1000);  //Relief pressure? Dont knowTime if its a problem really but doesnt hurt
 
   mqttClient.beginMessage(updateTopic);
   mqttClient.print("starting to drain");
@@ -341,15 +282,24 @@ void waterLevel(int level) {
   Serial.println("End watering");
 }
 
-char message[50];  //for storing incoming mqtt message
-void readMessage() {
-  int inx = 0;
-  while (mqttClient.available()) {
-    message[inx] = (char)mqttClient.read();
-    inx++;
-    // Serial.print((char)mqttClient.read());
-  }
-  message[inx] = '\0';  //null terminate
+
+void printTimeAndDate() {
+  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
+  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
+}
+
+void saveTime(char* inputString) {
+  char timeStr[50];
+  strcpy(timeStr, inputString);
+  Serial.println("We received: ");
+  Serial.println(timeStr);  //expecting of form "2022-11-23, 13:34"
+  char* yearHA = strtok(timeStr, "-");
+  char* monthHA = strtok(NULL, "-");
+  char* dayHA = strtok(NULL, ",");
+  char* hourHA = strtok(NULL, ":");
+  char* minuteHA = strtok(NULL, ":");
+  setTime(atoi(hourHA), atoi(minuteHA), 0, atoi(dayHA), atoi(monthHA), atoi(yearHA));
+  printTimeAndDate();
 }
 
 void onMqttMessage(int messageSize) {
@@ -358,12 +308,12 @@ void onMqttMessage(int messageSize) {
   if (topic == "Desoto/EbbNFlow/solenoids/1/command") {
     Serial.println("Should toggle solenoid 1");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid1State()) {  //if not on
         turnOnSolenoid1();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid1State()) {  //if on
         turnOffSolenoid1();
       }
@@ -371,17 +321,17 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/solenoids/2/command") {
     Serial.println("Should toggle solenoid 2");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid2State()) {  //if not on
         turnOnSolenoid2();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid2State()) {  //if on
         turnOffSolenoid2();
       }
@@ -389,17 +339,17 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/solenoids/3/command") {
     Serial.println("Should toggle solenoid 3");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid3State()) {  //if not on
         turnOnSolenoid3();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid3State()) {  //if on
         turnOffSolenoid3();
       }
@@ -407,17 +357,17 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/solenoids/4/command") {
     Serial.println("Should toggle solenoid 4");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid4State()) {  //if not on
         turnOnSolenoid4();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid4State()) {  //if on
         turnOffSolenoid4();
       }
@@ -425,21 +375,21 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/pump/command") {
     Serial.println("Should toggle pump");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!pumpState()) {  //if not on
         turnOnPump();
       }
-    } else if (strcmp(message, "{\"state\":\"off\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (pumpState()) {  //if on
         turnOffPump();
       }
-    } else if (strcmp(message, "{\"state\":\"start\"}") == 0) {
+    } else if (strcmp(mqttMessage, "{\"state\":\"start\"}") == 0) {
       if (!pumpState()) {  //if on
         pwmPump();
         turnOnPump();
@@ -448,116 +398,126 @@ void onMqttMessage(int messageSize) {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/1/command") {
     Serial.println("Should water level 1");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       waterLevel1();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/2/command") {
     Serial.println("Should water level 2");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       waterLevel2();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/3/command") {
     Serial.println("Should water level 3");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       waterLevel3();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/4/command") {
     Serial.println("Should water level 4");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       waterLevel4();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/all/command") {
     Serial.println("Should water all levels");
     readMessage();
-    Serial.println(message);
-    if (strcmp(message, "{\"state\":\"on\"}") == 0) {
+    Serial.println(mqttMessage);
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       waterLevels();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
       Serial.print(" and message: ");
-      Serial.println(message);
+      Serial.println(mqttMessage);
     }
   } else if (topic == "Desoto/EbbNFlow/watering/1/duration") {
     Serial.println("Should update level 1 watering duration");
     readMessage();
-    levelWaterDurations[0] = atoi(message) * MINTOMILLISEC;
+    levelWaterDurations[0] = atoi(mqttMessage) * MINTOMILLISEC;
     Serial.println(levelWaterDurations[0]);
   } else if (topic == "Desoto/EbbNFlow/watering/2/duration") {
     Serial.println("Should update level 2 watering duration");
     readMessage();
-    levelWaterDurations[1] = atoi(message) * MINTOMILLISEC;
+    levelWaterDurations[1] = atoi(mqttMessage) * MINTOMILLISEC;
     Serial.println(levelWaterDurations[1]);
   } else if (topic == "Desoto/EbbNFlow/watering/3/duration") {
     Serial.println("Should update level 3 watering duration");
     readMessage();
-    levelWaterDurations[2] = atoi(message) * MINTOMILLISEC;
+    levelWaterDurations[2] = atoi(mqttMessage) * MINTOMILLISEC;
     Serial.println(levelWaterDurations[2]);
   } else if (topic == "Desoto/EbbNFlow/watering/4/duration") {
     Serial.println("Should update level 4 watering duration");
     readMessage();
-    levelWaterDurations[3] = atoi(message) * MINTOMILLISEC;
+    levelWaterDurations[3] = atoi(mqttMessage) * MINTOMILLISEC;
     Serial.println(levelWaterDurations[3]);
   } else if (topic == "Desoto/EbbNFlow/watering/drain") {
     Serial.println("Should drain levels");
     readMessage();
-    Serial.println(message);
+    Serial.println(mqttMessage);
     drainLevels();
   } else if (topic == "Desoto/EbbNFlow/watering/finalDrainTime") {
     Serial.println("Should update drain time");
     readMessage();
-    draingTime = int(atof(message) * MINTOMILLISEC);
+    draingTime = int(atof(mqttMessage) * MINTOMILLISEC);
     Serial.println(draingTime);
 
+  } else if (topic == "homeassistant/dateAndTime") {
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    saveTime(mqttMessage);
   } else {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
   }
 }
 
-void checkWifiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Disconnected from wifi!");
+bool connectToWifi() {
+  Serial.println("Connecting to wifi: " + String(ssid));
+  WiFi.begin(ssid, password);
 
-    WiFi.begin(ssid, password);
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("");
-      Serial.println("WiFi connected");
-      Serial.println("IP address: ");
-      Serial.println(WiFi.localIP());
-    }
+  long startTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 60000) {
+    delay(500);
+    Serial.print(".");
   }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  }
+  Serial.println(" Failed:(");
+  return false;
 }
