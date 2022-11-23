@@ -58,8 +58,6 @@ void setup() {
   aero2AlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnRow2LightsOn);            // 1:00am every day
   aero2AlarmOffID = Alarm.alarmRepeat(17, 00, 0, turnRow2LightsOff);         // 5:00pm every day (1am -> 5pm = 18 hours)
 
-  Alarm.timerRepeat(5 * 60 * 1000, getNTPtime);  //get time every 5 minutes
-
   resyncToSchedule();
 }
 
