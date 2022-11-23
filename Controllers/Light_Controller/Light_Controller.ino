@@ -77,7 +77,7 @@ void setup() {
     pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
     pixels.show();                                    // Send the updated pixel colors to the hardware.
   }
-  
+
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
   ebbNFlowAlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnEbbNFlowLightsOn);     // 1:00am every day
@@ -118,9 +118,14 @@ long convertTimeToSecondsAfterMidnight(char hourTime[], char minuteTime[], char 
 void loop() {
   checkWifiConnection();
 
-  if (checkBrokerConnection()) {
+  if (!mqttClient.connected()) {
     pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
     pixels.show();                                    // Send the updated pixel colors to the hardware.
+
+    if (connectToBroker()) {
+      pixels.setPixelColor(0, pixels.Color(0, 20, 0));  //set to red
+      pixels.show();
+    }
   }
 
   Alarm.delay(0);  //needed to service alarms
