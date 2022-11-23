@@ -33,6 +33,8 @@ long levelWaterDurations[] = { 6 * MINTOMILLISEC, 4 * MINTOMILLISEC, 6 * MINTOMI
 long levelDrainDurations[] = { 21 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC };             //how long each level should drain for
 int pumpPWMTime = 8000;                                                                                                                                                                  //how long the pump should PWM
 
+bool waterLevel[] = { false, false, false, false, false, false, false };  //flags to water levels
+
 //---------------SETUP--------------------
 void setup() {
   Serial.begin(115200);
@@ -78,7 +80,7 @@ void setup() {
 void loop() {
   Alarm.delay(0);  //needed to service alarms
 
-  mqttClient.poll(); // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
+  mqttClient.poll();  // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
 
   if (!mqttClient.connected()) connectToBroker();
   if (WiFi.status() != WL_CONNECTED) connectToWifi();
@@ -302,6 +304,38 @@ void saveTime(char* inputString) {
   printTimeAndDate();
 }
 
+waterLevel1setFlag() {
+  waterLevel[0] = true;
+}
+waterLevel2setFlag() {
+  waterLevel[1] = true;
+}
+waterLevel3setFlag() {
+  waterLevel[2] = true;
+}
+waterLevel4setFlag() {
+  waterLevel[3] = true;
+}
+// waterLevel5setFlag() {
+//   waterLevel[4] = true;
+// }
+// waterLevel6setFlag() {
+//   waterLevel[5] = true;
+// }
+// waterLevel7setFlag() {
+//   waterLevel[6] = true;
+// }
+
+waterLevelssetFlag() {
+  waterLevel[0] = true;
+  waterLevel[1] = true;
+  waterLevel[2] = true;
+  waterLevel[3] = true;
+  // waterLevel[4] = true;
+  // waterLevel[5] = true;
+  // waterLevel[6] = true;
+}
+
 void onMqttMessage(int messageSize) {
 
   String topic = mqttClient.messageTopic();
@@ -405,7 +439,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel1();
+      waterLevel1setFlag();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
@@ -417,7 +451,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel2();
+      waterLevel2setFlag();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
@@ -429,7 +463,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel3();
+      waterLevel3setFlag();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
@@ -441,7 +475,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel4();
+      waterLevel4setFlag();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
@@ -453,7 +487,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevels();
+      waterLevelssetFlag();
     } else {
       Serial.print("message not recognized for topic: ");
       Serial.print(topic);
