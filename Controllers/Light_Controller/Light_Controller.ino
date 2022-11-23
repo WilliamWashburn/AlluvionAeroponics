@@ -55,8 +55,6 @@ void setup() {
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
-    pixels.setPixelColor(0, pixels.Color(0, 10, 0));
-    pixels.show();  // Send the updated pixel colors to the hardware.
   } else {
     Serial.println("Failed to connect to wifi");
     pixels.setPixelColor(0, pixels.Color(10, 0, 0));
@@ -76,6 +74,11 @@ void setup() {
   if (!connectToBroker()) {
     pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
     pixels.show();                                    // Send the updated pixel colors to the hardware.
+  }
+
+  if(mqttClient.connected() && WiFi.status() == WL_CONNECTED){
+    pixels.setPixelColor(0, pixels.Color(0, 10, 0));
+    pixels.show();  // Send the updated pixel colors to the hardware.
   }
 
   //SET ALARMS
