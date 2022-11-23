@@ -1,4 +1,5 @@
 #include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "wifiFunctions.h"
 #include "ntpFunctions.h"
 #include "mqttFunctions.h"
 
@@ -7,11 +8,6 @@
 
 #include <Adafruit_NeoPixel.h>
 Adafruit_NeoPixel pixels(1, 0, NEO_GRB);
-
-AlarmId id;
-
-const char* ssid = mySSID;
-const char* password = myPASSWORD;
 
 int lightPins[] = { 4, 26, 25, 13 };
 
@@ -36,38 +32,13 @@ void setup() {
   }
 
   //START NEOPIXEL
-  pixels.begin();  // INITIALIZE NeoPixel strip object (REQUIRED)
-  pixels.clear();  // Set all pixel colors to 'off'
+  pixels.begin();                                   // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.clear();                                   // Set all pixel colors to 'off'
+  pixels.setPixelColor(0, pixels.Color(0, 0, 10));  //set blue while connecting
+  pixels.show();                                    // Send the updated pixel colors to the hardware.
 
   //CONNECT TO WIFI
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-  int startTime = millis();
-  while (millis() - startTime < 60000 && WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    pixels.setPixelColor(0, pixels.Color(0, 0, 10));  //set blue while connecting
-    pixels.show();                                    // Send the updated pixel colors to the hardware.
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("Failed to connect to wifi");
-    pixels.setPixelColor(0, pixels.Color(10, 0, 0));
-    pixels.show();  // Send the updated pixel colors to the hardware.
-  }
-
-  //CONNECT TO NTP
-  configTime(0, 0, NTP_SERVER);  // See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
-  setenv("TZ", TZ_INFO, 1);
-  getNTPtime(10);
-  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday, timeinfo.tm_mon + 1, 1900 + timeinfo.tm_year);  // tm_mon is 0-11 so add 1, tm_year is years since 1900 so add to 1900
-  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
-  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
+  connectToWifi();  
 
   //CONNECT TO MQTT BROKER
   mqttClient.onMessage(onMqttMessage);  // set the message receive callback
@@ -76,7 +47,7 @@ void setup() {
     pixels.show();                                    // Send the updated pixel colors to the hardware.
   }
 
-  if(mqttClient.connected() && WiFi.status() == WL_CONNECTED){
+  if (mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
     pixels.setPixelColor(0, pixels.Color(0, 10, 0));
     pixels.show();  // Send the updated pixel colors to the hardware.
   }
@@ -88,7 +59,37 @@ void setup() {
   aero2AlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnRow2LightsOn);            // 1:00am every day
   aero2AlarmOffID = Alarm.alarmRepeat(17, 00, 0, turnRow2LightsOff);         // 5:00pm every day (1am -> 5pm = 18 hours)
 
+  Alarm.timerRepeat(5 * 60 * 1000, getNTPtime);  //get time every 5 minutes
+
   resyncToSchedule();
+}
+
+void loop() {
+  if (!checkWifiConnection()) {
+    pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
+    pixels.show();
+
+    if (connectToWifi()) {
+      pixels.setPixelColor(0, pixels.Color(0, 20, 0));  //set to red
+      pixels.show();
+    }
+  }
+
+  if (!mqttClient.connected()) {
+    pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
+    pixels.show();                                    // Send the updated pixel colors to the hardware.
+
+    if (connectToBroker()) {
+      pixels.setPixelColor(0, pixels.Color(0, 20, 0));  //set to green
+      pixels.show();
+    }
+  }
+
+  Alarm.delay(0);  //needed to service alarms
+
+  // call poll() regularly to allow the library to receive MQTT messages and
+  // send MQTT keep alives which avoids being disconnected by the broker
+  mqttClient.poll();
 }
 
 void resyncToSchedule() {
@@ -116,26 +117,6 @@ long convertTimeToSecondsAfterMidnight(int hourTime, int minuteTime, int secondT
 
 long convertTimeToSecondsAfterMidnight(char hourTime[], char minuteTime[], char secondTime[] = "0") {
   return atoi(hourTime) * 3600L + atoi(minuteTime) * 60L + atoi(secondTime);
-}
-
-void loop() {
-  checkWifiConnection();
-
-  if (!mqttClient.connected()) {
-    pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
-    pixels.show();                                    // Send the updated pixel colors to the hardware.
-
-    if (connectToBroker()) {
-      pixels.setPixelColor(0, pixels.Color(0, 20, 0));  //set to red
-      pixels.show();
-    }
-  }
-
-  Alarm.delay(0);  //needed to service alarms
-
-  // call poll() regularly to allow the library to receive MQTT messages and
-  // send MQTT keep alives which avoids being disconnected by the broker
-  mqttClient.poll();
 }
 
 void turnEbbNFlowLightsOn() {
@@ -187,6 +168,25 @@ void turnRow3LightsOn() {
 }
 void turnRow3LightsOff() {
   digitalWrite(lightPins[3], LOW);
+}
+
+void printTimeAndDate() {
+  Serial.println("Time: " + String(hour()) + ":" + String(minute()) + ":" + String(second()));
+  Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
+}
+
+void saveTime(char* inputString) {
+  char timeStr[50];
+  strcpy(timeStr,inputString);
+  Serial.println("We received: ");
+  Serial.println(timeStr); //expecting of form "2022-11-23, 13:34"
+  char* yearHA = strtok(timeStr,"-");
+  char* monthHA = strtok(NULL,"-");
+  char* dayHA = strtok(NULL,",");
+  char* hourHA = strtok(NULL,":");
+  char* minuteHA = strtok(NULL,":");
+  setTime(atoi(hourHA), atoi(minuteHA), 0, atoi(dayHA), atoi(monthHA), atoi(yearHA));
+  printTimeAndDate();
 }
 
 void onMqttMessage(int messageSize) {
@@ -265,28 +265,12 @@ void onMqttMessage(int messageSize) {
 
     //update time
     Alarm.write(aero2AlarmOnID, convertTimeToSecondsAfterMidnight(hourOff, minOff));
+  } else if (topic == "homeassistant/dateAndTime") {
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    saveTime(mqttMessage);
   } else {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
-  }
-}
-
-void checkWifiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Disconnected from wifi!");
-
-    pixels.setPixelColor(0, pixels.Color(10, 0, 0));
-    pixels.show();  // Send the updated pixel colors to the hardware.
-
-    WiFi.begin(ssid, password);
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("");
-      Serial.println("WiFi connected");
-      Serial.println("IP address: ");
-      Serial.println(WiFi.localIP());
-      pixels.setPixelColor(0, pixels.Color(0, 10, 0));
-      pixels.show();  // Send the updated pixel colors to the hardware.
-    }
   }
 }

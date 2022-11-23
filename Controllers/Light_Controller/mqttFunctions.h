@@ -18,6 +18,7 @@ void subscriptToTopics() {
   Serial.println(topic);
   Serial.println();
   mqttClient.subscribe(topic);  // subscribe to a topic
+  mqttClient.subscribe("homeassistant/dateAndTime");
 }
 
 void updateWillTopic() {
