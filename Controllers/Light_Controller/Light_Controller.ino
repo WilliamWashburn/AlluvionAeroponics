@@ -1,6 +1,5 @@
 #include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
 #include "wifiFunctions.h"
-#include "ntpFunctions.h"
 #include "mqttFunctions.h"
 
 #include <TimeLib.h>
