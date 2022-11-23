@@ -39,6 +39,7 @@ void configureBrokerClient() {
 bool connectToBroker() {
   Serial.print("Attempting to connect to the MQTT broker: ");
   Serial.println(broker);
+  configureBrokerClient();
 
   long startTime = millis();
   while (!mqttClient.connect(broker, port) && millis() - startTime < 10000) {
