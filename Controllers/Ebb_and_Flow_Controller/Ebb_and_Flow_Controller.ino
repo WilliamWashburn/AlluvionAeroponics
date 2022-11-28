@@ -26,14 +26,14 @@ int pumpPin = 26;
 int solenoidPins[] = { 13, 12, 27, 14, 33, 15, 32 };  //solenoid pins
 
 //SOLENOID INFORMATION
-int nbrOfSolenoids = 4;                                                                                                                                                                  //number of solenoids connected
-long levelDelays[] = { 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC, 8 * HOURTOMILLISEC };                     //how long to wait between watering
-long levelLastWatered[] = { -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC };  //the last time that the level was watered, -24 makes it water immediately
-long levelWaterDurations[] = { 6 * MINTOMILLISEC, 4 * MINTOMILLISEC, 6 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC };                //how long each level should water for
-long levelDrainDurations[] = { 21 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 12 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC, 22 * MINTOMILLISEC };             //how long each level should drain for
-int pumpPWMTime = 8000;                                                                                                                                                                  //how long the pump should PWM
+const int nbrOfSolenoids = 4;                                     //number of solenoids connected
+long levelDelays[] = { 8, 8, 8, 8, 8, 8, 8 };                     //hours. how long to wait between watering
+long levelLastWatered[] = { -24, -24, -24, -24, -24, -24, -24 };  //hours. the last time that the level was watered, -24 makes it water immediately
+long levelWaterDurations[] = { 6, 4, 6, 12, 12, 12, 12 };         //minutes. how long each level should water for
+long levelDrainDurations[] = { 21, 12, 12, 12, 22, 22, 22 };      //minutes. how long each level should drain for
+int pumpPWMTime = 8000;                                           //milliseconds. How long the pump should pwm for
 
-bool waterLevel[] = { false, false, false, false, false, false, false };  //flags to water levels
+bool waterLevelFlags[nbrOfSolenoids + 1];  //flags to water levels. The last index is for watering all the levels
 
 //---------------SETUP--------------------
 void setup() {
@@ -47,6 +47,12 @@ void setup() {
     pinMode(solenoidPins[i], OUTPUT);
     digitalWrite(solenoidPins[i], LOW);  //turn solenoids off
   }
+
+  //initialize flags
+  for (int i = 0; i < nbrOfSolenoids + 1; i++) {
+    waterLevelFlags[i] = false;
+  }
+
   //CONNECT TO WIFI
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -84,6 +90,24 @@ void loop() {
 
   if (!mqttClient.connected()) connectToBroker();
   if (WiFi.status() != WL_CONNECTED) connectToWifi();
+
+  checkWateringFlags();
+}
+
+void checkWateringFlags() {
+  for (int i = 0; i < nbrOfSolenoids; i++) {
+    if (waterLevelFlags[i]) {
+      Serial.println("Watering level " + String(i));
+      waterLevel(i);
+      waterLevelFlags[i] = false;
+    }
+  }
+  //this last flag is for watering all the levels
+  if (waterLevelFlags[nbrOfSolenoids]) {
+    Serial.println("Watering all levels ");
+    waterLevels();
+    waterLevelFlags[nbrOfSolenoids] = false;
+  }
 }
 
 void turnOffSolenoids() {
@@ -96,7 +120,7 @@ void printInfo() {
   //Print time left
   for (int level = 0; level < nbrOfSolenoids; level++) {
     Serial.print("Time Left for level " + String(level) + " : ");
-    Serial.print((levelDelays[level] - (millis() - levelLastWatered[level])) / (1000L * 60L));
+    Serial.print(((levelDelays[level] * HOURTOMILLISEC) - (millis() - (levelLastWatered[level] * HOURTOMILLISEC))) / (1000L * 60L));
     Serial.println(" minutes");
   }
 
@@ -181,6 +205,12 @@ void drainLevels() {
     drainLevel(i);
   }
 }
+void waterLevels() {
+  for (int i = 1; i <= nbrOfSolenoids; i++) {
+    waterLevel(i);
+  }
+  drainLevels();
+}
 
 //this is a mock delay function that still does whatever we need to do such as maintain connection with mqtt
 void myDelay(long delayTime, bool shouldPrint = false) {
@@ -201,13 +231,6 @@ void drainLevel(int sol) {
   digitalWrite(solenoidPins[sol - 1], HIGH);
   myDelay(draingTime, true);  //custom delay function that still keeps connection with mqtt
   digitalWrite(solenoidPins[sol - 1], LOW);
-}
-
-void waterLevels() {
-  for (int i = 1; i <= nbrOfSolenoids; i++) {
-    waterLevel(i);
-  }
-  drainLevels();
 }
 
 void pwmPump() {
@@ -232,7 +255,7 @@ void waterLevel(int level) {
   strcat(updateTopic, "/wateringUpdate");
 
   level = level - 1;  //adjust so level 1 is index 0
-  Serial.println("Starting to water for " + String(levelWaterDurations[level] / 1000L) + " seconds");
+  Serial.println("Starting to water for " + String((levelWaterDurations[level] * MINTOMILLISEC) / 1000L) + " seconds");
   levelLastWatered[level] = millis();  //update record of timing
 
   //update to mqtt
@@ -266,9 +289,9 @@ void waterLevel(int level) {
   mqttClient.print("starting to drain");
   mqttClient.endMessage();
   long startDrain = millis();
-  while (millis() - startDrain < levelDrainDurations[level]) {
+  while (millis() - startDrain < levelDrainDurations[level] * MINTOMILLISEC) {
     //pass
-    int secondsLeft = (int)(levelDrainDurations[level] - (millis() - startDrain)) / 1000;
+    int secondsLeft = (int)((levelDrainDurations[level] * MINTOMILLISEC) - (millis() - startDrain)) / 1000;
     static int prevSecondsLeft = 0;
     if (secondsLeft != prevSecondsLeft) {
       Serial.println(String(secondsLeft) + " seconds left in draining");
@@ -304,197 +327,145 @@ void saveTime(char* inputString) {
   printTimeAndDate();
 }
 
-waterLevel1setFlag() {
-  waterLevel[0] = true;
-}
-waterLevel2setFlag() {
-  waterLevel[1] = true;
-}
-waterLevel3setFlag() {
-  waterLevel[2] = true;
-}
-waterLevel4setFlag() {
-  waterLevel[3] = true;
-}
-// waterLevel5setFlag() {
-//   waterLevel[4] = true;
-// }
-// waterLevel6setFlag() {
-//   waterLevel[5] = true;
-// }
-// waterLevel7setFlag() {
-//   waterLevel[6] = true;
-// }
+void waterLevelXsetFlag(int levelNbr) {
+  waterLevelFlags[levelNbr - 1] = true;  //level 1 should be index 0
 
-waterLevelssetFlag() {
-  waterLevel[0] = true;
-  waterLevel[1] = true;
-  waterLevel[2] = true;
-  waterLevel[3] = true;
-  // waterLevel[4] = true;
-  // waterLevel[5] = true;
-  // waterLevel[6] = true;
+  Serial.println("The flags are now");
+  for (int i = 0; i < nbrOfSolenoids + 1; i++) {
+    Serial.print(String(waterLevelFlags[i])); Serial.print(",");    
+  }
+  Serial.println();
 }
 
+bool parsingError = false;  //flag for parsing error. Either topic or message not recognized
+
+//everything in this function should be executed quickly. If there is any need for a delay, think about setting a flag in this function and responding in the loop
 void onMqttMessage(int messageSize) {
+  long startResponse = millis();
 
   String topic = mqttClient.messageTopic();
+  Serial.println();
+  Serial.println(topic);
+
+  //MANUALLY CONTROLL SOLENOIDS/PUMP
   if (topic == "Desoto/EbbNFlow/solenoids/1/command") {
-    Serial.println("Should toggle solenoid 1");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid1State()) {  //if not on
+        Serial.println("Should turn on solenoid 1");
         turnOnSolenoid1();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid1State()) {  //if on
+        Serial.println("Should turn off solenoid 1");
         turnOffSolenoid1();
       }
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/solenoids/2/command") {
-    Serial.println("Should toggle solenoid 2");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid2State()) {  //if not on
+        Serial.println("Should turn on solenoid 2");
         turnOnSolenoid2();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid2State()) {  //if on
+        Serial.println("Should turn off solenoid 2");
         turnOffSolenoid2();
       }
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/solenoids/3/command") {
-    Serial.println("Should toggle solenoid 3");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid3State()) {  //if not on
+        Serial.println("Should turn on solenoid 3");
         turnOnSolenoid3();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid3State()) {  //if on
+        Serial.println("Should turn off solenoid 3");
         turnOffSolenoid3();
       }
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/solenoids/4/command") {
-    Serial.println("Should toggle solenoid 4");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!solenoid4State()) {  //if not on
+        Serial.println("Should turn on solenoid 4");
         turnOnSolenoid4();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (solenoid4State()) {  //if on
+        Serial.println("Should turn on solenoid 4");
         turnOffSolenoid4();
       }
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/pump/command") {
-    Serial.println("Should toggle pump");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
       if (!pumpState()) {  //if not on
+        Serial.println("Should turn pump on");
         turnOnPump();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
       if (pumpState()) {  //if on
+        Serial.println("Should turn pump off");
         turnOffPump();
       }
     } else if (strcmp(mqttMessage, "{\"state\":\"start\"}") == 0) {
       if (!pumpState()) {  //if on
+        Serial.println("Should start the pump");
         pwmPump();
         turnOnPump();
       }
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
-  } else if (topic == "Desoto/EbbNFlow/watering/1/command") {
-    Serial.println("Should water level 1");
+    } else parsingError = true;
+  }
+
+  //MANUALLY TRIGGGER WATERINGS
+  else if (topic == "Desoto/EbbNFlow/watering/1/command") {
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel1setFlag();
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+      Serial.println("Should water level 1");
+      waterLevelXsetFlag(1);
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/watering/2/command") {
-    Serial.println("Should water level 2");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel2setFlag();
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+      Serial.println("Should water level 2");
+      waterLevelXsetFlag(2);
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/watering/3/command") {
-    Serial.println("Should water level 3");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel3setFlag();
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+      Serial.println("Should water level 3");
+      waterLevelXsetFlag(3);
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/watering/4/command") {
-    Serial.println("Should water level 4");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevel4setFlag();
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
+      Serial.println("Should water level 4");
+      waterLevelXsetFlag(4);
+    } else parsingError = true;
   } else if (topic == "Desoto/EbbNFlow/watering/all/command") {
-    Serial.println("Should water all levels");
     readMessage();
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      waterLevelssetFlag();
-    } else {
-      Serial.print("message not recognized for topic: ");
-      Serial.print(topic);
-      Serial.print(" and message: ");
-      Serial.println(mqttMessage);
-    }
-  } else if (topic == "Desoto/EbbNFlow/watering/1/duration") {
+      Serial.println("Should water all levels");
+      waterLevelXsetFlag(nbrOfSolenoids + 1);  //this will set the flag of index: nbrOfSolenoids
+    } else parsingError = true;
+  }
+
+  // UPDATE WATER DURATIONS
+  else if (topic == "Desoto/EbbNFlow/watering/1/duration") {
     Serial.println("Should update level 1 watering duration");
     readMessage();
     levelWaterDurations[0] = atoi(mqttMessage) * MINTOMILLISEC;
@@ -514,25 +485,48 @@ void onMqttMessage(int messageSize) {
     readMessage();
     levelWaterDurations[3] = atoi(mqttMessage) * MINTOMILLISEC;
     Serial.println(levelWaterDurations[3]);
-  } else if (topic == "Desoto/EbbNFlow/watering/drain") {
+  }
+
+  //TRIGGER DRAINING
+  else if (topic == "Desoto/EbbNFlow/watering/drain") {
     Serial.println("Should drain levels");
     readMessage();
     Serial.println(mqttMessage);
     drainLevels();
-  } else if (topic == "Desoto/EbbNFlow/watering/finalDrainTime") {
+  }
+
+  // FINAL DRAIN TIME
+  else if (topic == "Desoto/EbbNFlow/watering/finalDrainTime") {
     Serial.println("Should update drain time");
     readMessage();
     draingTime = int(atof(mqttMessage) * MINTOMILLISEC);
     Serial.println(draingTime);
+  }
 
-  } else if (topic == "homeassistant/dateAndTime") {
+  //UPDATE TIME AND DATE
+  else if (topic == "homeassistant/dateAndTime") {
     readMessage();
     Serial.println("Received message: " + String(mqttMessage));
     saveTime(mqttMessage);
-  } else {
+  }
+
+  //IF TOPIC NOT RECOGNIZED
+  else {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
   }
+
+  //IF MESSAGE IN A TOPIC WAS NOT RECOGNIZED
+  if (parsingError) {
+    Serial.print("message not recognized for topic: ");
+    Serial.print(topic);
+    Serial.print(" and message: ");
+    Serial.println(mqttMessage);
+    parsingError = false;
+  }
+
+  Serial.println("Parse/response time: " + String(millis() - startResponse) + " milliseconds");
+  Serial.println();
 }
 
 bool connectToWifi() {
