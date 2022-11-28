@@ -65,3 +65,23 @@ void readMessage() {
   }
   mqttMessage[inx] = '\0';  // null terminate
 }
+
+void printToBroker(char* messageForBroker, bool printToSerial = true) {
+  mqttClient.beginMessage("Desoto/EbbNFlow/statusUpdate");
+  mqttClient.print(messageForBroker);
+  mqttClient.endMessage();
+
+  if (printToSerial) {
+    Serial.println(messageForBroker);
+  }
+}
+
+void printToBroker(String messageForBroker, bool printToSerial = true) {
+  mqttClient.beginMessage("Desoto/EbbNFlow/statusUpdate");
+  mqttClient.print(messageForBroker);
+  mqttClient.endMessage();
+
+  if (printToSerial) {
+    Serial.println(messageForBroker);
+  }
+}
