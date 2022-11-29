@@ -203,9 +203,11 @@ void waterLevel4() {
 }
 
 void drainLevels() {
+  printToBroker("Starting to drain all levels");
   for (int i = 1; i <= nbrOfSolenoids; i++) {
     drainLevel(i);
   }
+  printToBroker("Finished draining all levels");
 }
 void waterLevels() {
   for (int i = 1; i <= nbrOfSolenoids; i++) {
@@ -229,19 +231,20 @@ void myDelay(long delayTime, bool shouldPrint = false) {
 }
 
 long draingTime = 120000;  //milliseconds
-void drainLevel(int sol) {
-  digitalWrite(solenoidPins[sol - 1], HIGH);
+
+void drainLevel(int level) {
+  int levelInx = level - 1;
+  digitalWrite(solenoidPins[levelInx], HIGH);
   long startTime = millis();
   while (millis() - startTime < draingTime) {
-    //pass
     static long printTime = 0;
     if (millis() - printTime > 1000) {
-      printToBroker(String((draingTime - (millis() - startTime)) / 1000L) + " seconds in draining");
+      printToBroker(String((draingTime - (millis() - startTime)) / 1000L) + " seconds in draining " + String(level));
       printTime = millis();
     }
     mqttClient.poll();
   }
-  digitalWrite(solenoidPins[sol - 1], LOW);
+  digitalWrite(solenoidPins[levelInx], LOW);
 }
 
 void pwmPump() {
@@ -265,7 +268,7 @@ void waterLevel(int level) {
   strcat(updateTopic, itoa(level, levelNbrAsChar, 10));
   strcat(updateTopic, "/wateringUpdate");
 
-  levelInx = level - 1;  //adjust so level 1 is index 0
+  int levelInx = level - 1;  //adjust so level 1 is index 0
   Serial.println("Starting to water for " + String(levelWaterDurations[levelInx] * 60L) + " seconds");
   levelLastWatered[levelInx] = millis();  //update record of timing
 
