@@ -76,6 +76,8 @@ void setup() {
   mqttClient.onMessage(onMqttMessage);  // set the message receive callback
   connectToBroker();
 
+  askForTime();
+
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
   watering1AlarmID = Alarm.alarmRepeat(9, 00, 0, waterLevels);
@@ -639,4 +641,12 @@ bool connectToWifi() {
   }
   Serial.println(" Failed:(");
   return false;
+}
+
+void askForTime() {
+  Serial.println("Asking for time");
+  char topic[] = "homeassistant/requestTime";
+  mqttClient.beginMessage(topic);
+  mqttClient.print("requesting time");  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
 }
