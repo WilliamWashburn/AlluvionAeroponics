@@ -498,19 +498,19 @@ void onMqttMessage(int messageSize) {
   else if (topic == "Desoto/EbbNFlow/watering/1/duration") {
     readMessage();
     levelWaterDurations[0] = atoi(mqttMessage);
-    printToBroker("Updated watering duration 1 to " + String(levelWaterDurations[0] + " minutes"));
+    printToBroker("Updated watering duration 1 to " + String(levelWaterDurations[0]) + " minutes");
   } else if (topic == "Desoto/EbbNFlow/watering/2/duration") {
     readMessage();
     levelWaterDurations[1] = atoi(mqttMessage);
-    printToBroker("Updated watering duration 2 to " + String(levelWaterDurations[1] + " minutes"));
+    printToBroker("Updated watering duration 2 to " + String(levelWaterDurations[1]) + " minutes");
   } else if (topic == "Desoto/EbbNFlow/watering/3/duration") {
     readMessage();
     levelWaterDurations[2] = atoi(mqttMessage);
-    printToBroker("Updated watering duration 3 to " + String(levelWaterDurations[2] + " minutes"));
+    printToBroker("Updated watering duration 3 to " + String(levelWaterDurations[2]) + " minutes");
   } else if (topic == "Desoto/EbbNFlow/watering/4/duration") {
     readMessage();
     levelWaterDurations[3] = atoi(mqttMessage);
-    printToBroker("Updated watering duration 4 to " + String(levelWaterDurations[3] + " minutes"));
+    printToBroker("Updated watering duration 4 to " + String(levelWaterDurations[3]) + " minutes");
   }
 
   //UPDATE WATERING SCHEDULE
