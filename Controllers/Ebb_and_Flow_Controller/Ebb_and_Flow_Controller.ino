@@ -265,9 +265,9 @@ void waterLevel(int level) {
   strcat(updateTopic, itoa(level, levelNbrAsChar, 10));
   strcat(updateTopic, "/wateringUpdate");
 
-  level = level - 1;  //adjust so level 1 is index 0
-  Serial.println("Starting to water for " + String(levelWaterDurations[level] * 60L) + " seconds");
-  levelLastWatered[level] = millis();  //update record of timing
+  levelInx = level - 1;  //adjust so level 1 is index 0
+  Serial.println("Starting to water for " + String(levelWaterDurations[levelInx] * 60L) + " seconds");
+  levelLastWatered[levelInx] = millis();  //update record of timing
 
   //update to mqtt
   mqttClient.beginMessage(updateTopic);
@@ -275,7 +275,7 @@ void waterLevel(int level) {
   mqttClient.endMessage();
 
   //open solenoid
-  digitalWrite(solenoidPins[level], HIGH);
+  digitalWrite(solenoidPins[levelInx], HIGH);
 
   //PWM the pump
   pwmPump();
@@ -283,11 +283,11 @@ void waterLevel(int level) {
   //turn solenoid on and wait
   digitalWrite(pumpPin, HIGH);
   long wateringStartTime = millis();
-  while (millis() - wateringStartTime < levelWaterDurations[level] * MINTOMILLISEC) {
-    int secondsLeft = (int)((levelWaterDurations[level] * MINTOMILLISEC) - (millis() - wateringStartTime)) / 1000;
+  while (millis() - wateringStartTime < levelWaterDurations[levelInx] * MINTOMILLISEC) {
+    int secondsLeft = (int)((levelWaterDurations[levelInx] * MINTOMILLISEC) - (millis() - wateringStartTime)) / 1000;
     static int prevSecondsLeft = 0;
     if (secondsLeft != prevSecondsLeft) {
-      printToBroker(String(secondsLeft) + " seconds left in watering " + String(level + 1));
+      printToBroker(String(secondsLeft) + " seconds left in watering " + String(level));
       prevSecondsLeft = secondsLeft;
     }
     mqttClient.poll();
@@ -300,25 +300,25 @@ void waterLevel(int level) {
   mqttClient.print("starting to drain");
   mqttClient.endMessage();
   long startDrain = millis();
-  while (millis() - startDrain < levelDrainDurations[level] * MINTOMILLISEC) {
+  while (millis() - startDrain < levelDrainDurations[levelInx] * MINTOMILLISEC) {
     //pass
-    int secondsLeft = (int)((levelDrainDurations[level] * MINTOMILLISEC) - (millis() - startDrain)) / 1000;
+    int secondsLeft = (int)((levelDrainDurations[levelInx] * MINTOMILLISEC) - (millis() - startDrain)) / 1000;
     static int prevSecondsLeft = 0;
     if (secondsLeft != prevSecondsLeft) {
-      printToBroker(String(secondsLeft) + " seconds left in draining" + String(level + 1));
+      printToBroker(String(secondsLeft) + " seconds left in draining" + String(level));
       prevSecondsLeft = secondsLeft;
     }
     mqttClient.poll();
   }
   //turn off solenoid
-  digitalWrite(solenoidPins[level], LOW);
+  digitalWrite(solenoidPins[levelInx], LOW);
 
   //send ending message to MQTT
   mqttClient.beginMessage(updateTopic);
   mqttClient.print("draining ended");
   mqttClient.endMessage();
 
-  Serial.println("End watering");
+  printToBroker("Finished watering level " + String(level));
 }
 
 
