@@ -268,7 +268,7 @@ void waterLevel(int level) {
   strcat(updateTopic, itoa(level, levelNbrAsChar, 10));
   strcat(updateTopic, "/wateringUpdate");
 
-  levelInx = level - 1;  //adjust so level 1 is index 0
+  int levelInx = level - 1;  //adjust so level 1 is index 0
   Serial.println("Starting to water for " + String(levelWaterDurations[levelInx] * 60L) + " seconds");
   levelLastWatered[levelInx] = millis();  //update record of timing
 
