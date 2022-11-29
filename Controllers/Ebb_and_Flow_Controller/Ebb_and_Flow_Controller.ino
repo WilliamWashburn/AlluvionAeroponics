@@ -310,7 +310,7 @@ void waterLevel(int level) {
     int secondsLeft = (int)((levelDrainDurations[levelInx] * MINTOMILLISEC) - (millis() - startDrain)) / 1000;
     static int prevSecondsLeft = 0;
     if (secondsLeft != prevSecondsLeft) {
-      printToBroker(String(secondsLeft) + " seconds left in draining" + String(level));
+      printToBroker(String(secondsLeft) + " seconds left in draining " + String(level));
       prevSecondsLeft = secondsLeft;
     }
     mqttClient.poll();
