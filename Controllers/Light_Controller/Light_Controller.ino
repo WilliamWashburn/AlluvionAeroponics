@@ -51,6 +51,8 @@ void setup() {
     pixels.show();  // Send the updated pixel colors to the hardware.
   }
 
+  askForTime();
+
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
   ebbNFlowAlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnEbbNFlowLightsOn);     // 1:00am every day
@@ -270,4 +272,12 @@ void onMqttMessage(int messageSize) {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
   }
+}
+
+void askForTime() {
+  Serial.println("Asking for time");
+  char topic[] = "homeassistant/requestTime";
+  mqttClient.beginMessage(topic);
+  mqttClient.print("requesting time");  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
 }
