@@ -62,7 +62,8 @@ void setup() {
 
   //SET ALARMS
   //We need to have the time set before setting these timers
-  if (!isTimeSet) {               //if failed to set time, set generic time
+  if (!isTimeSet) {  //if failed to set time, set generic time
+    Serial.println("Failed to get time, setting to 9:00 am");
     setTime(9, 00, 0, 6, 6, 23);  // 9am if fail to get time
   }
   ebbNFlowAlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnEbbNFlowLightsOn);     // 1:00am every day

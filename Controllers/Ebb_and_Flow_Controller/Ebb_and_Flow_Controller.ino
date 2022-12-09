@@ -36,6 +36,9 @@ int pumpPWMTime = 8000;                                                         
 
 bool waterLevelFlags[nbrOfSolenoids + 1];  //flags to water levels. The last index is for watering all the levels
 
+bool isTimeSet = false;  // to keep track of if the time has been set on bootup
+
+
 //---------------SETUP--------------------
 void setup() {
   Serial.begin(115200);
@@ -75,8 +78,18 @@ void setup() {
   //CONNECT TO MQTT BROKER
   mqttClient.onMessage(onMqttMessage);  // set the message receive callback
   connectToBroker();
+  publishIP();
 
   askForTime();
+  int count = 0;
+  while (!isTimeSet && count < 500) {
+    mqttClient.poll();
+    count++;
+  }
+  if (!isTimeSet) {
+    Serial.println("Failed to get time, setting to 9:00 am");
+    setTime(9, 00, 0, 6, 6, 23);  // 9am if fail to get time
+  }
 
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
@@ -350,6 +363,7 @@ void saveTime(char* inputString) {
   char* minuteHA = strtok(NULL, ":");
   setTime(atoi(hourHA), atoi(minuteHA), 0, atoi(dayHA), atoi(monthHA), atoi(yearHA));
   printTimeAndDate();
+  isTimeSet = true;
 }
 
 void waterLevelXsetFlag(int levelNbr) {
@@ -665,6 +679,20 @@ void updateTime() {
   bool retained = false;
   int qos = 1;
   bool dup = false;
+  mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
+  mqttClient.print(message);  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
+}
+
+
+void publishIP() {
+  IPAddress address = WiFi.localIP();
+  String message = String(address[0]) + "." + String(address[1]) + "." + String(address[2]) + "." + String(address[3]);  //convert to String
+  char topic[] = "Desoto/EbbNFlow/IPAddress";
+  bool retained = true;
+  int qos = 1;
+  bool dup = false;
+  Serial.println("IP: " + message);
   mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
   mqttClient.print(message);  //triggers message in telegram through node red on home assistant
   mqttClient.endMessage();
