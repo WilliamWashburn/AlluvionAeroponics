@@ -10,21 +10,19 @@ Adafruit_NeoPixel pixels(1, 0, NEO_GRB);
 
 int lightPins[] = { 4, 26, 25, 13 };
 
-AlarmID_t ebbNFlowAlarmOnID;
-AlarmID_t ebbNFlowAlarmOffID;
-AlarmID_t aero2AlarmOnID;
-AlarmID_t aero2AlarmOffID;
+AlarmId ebbNFlowAlarmOnID;
+AlarmId ebbNFlowAlarmOffID;
+AlarmId aero2AlarmOnID;
+AlarmId aero2AlarmOffID;
+
+bool isTimeSet = false;  // to keep track of if the time has been set on bootup
 
 void setup() {
   //CONNECT TO SERIAL
   Serial.begin(115200);
-  while (!Serial)
-    ;  // wait for Arduino Serial Monitor
+  Serial.println("Beginning...");
 
-  Serial.println();
-  Serial.println();
-
-  //Set pinMode and turn off
+  //CONFIGURE PINS
   for (int i = 0; i < 4; i++) {
     pinMode(lightPins[i], OUTPUT);
     digitalWrite(lightPins[i], LOW);
@@ -37,7 +35,7 @@ void setup() {
   pixels.show();                                    // Send the updated pixel colors to the hardware.
 
   //CONNECT TO WIFI
-  connectToWifi();  
+  connectToWifi();
 
   //CONNECT TO MQTT BROKER
   mqttClient.onMessage(onMqttMessage);  // set the message receive callback
@@ -45,22 +43,45 @@ void setup() {
     pixels.setPixelColor(0, pixels.Color(20, 0, 0));  //set to red
     pixels.show();                                    // Send the updated pixel colors to the hardware.
   }
+  publishIP();
 
+  //DISPLAY INDICATOR
   if (mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
     pixels.setPixelColor(0, pixels.Color(0, 10, 0));
     pixels.show();  // Send the updated pixel colors to the hardware.
   }
 
+  //GET TIME
   askForTime();
+  int count = 0;
+  while (!isTimeSet && count < 500) {
+    Serial.println("Polling for time!");
+    mqttClient.poll();
+    count++;
+  }
 
   //SET ALARMS
-  //ill need to get the ID of the alarm to be able to update it
+  //We need to have the time set before setting these timers
+  if (!isTimeSet) {               //if failed to set time, set generic time
+    setTime(9, 00, 0, 6, 6, 23);  // 9am if fail to get time
+  }
   ebbNFlowAlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnEbbNFlowLightsOn);     // 1:00am every day
   ebbNFlowAlarmOffID = Alarm.alarmRepeat(17, 00, 0, turnEbbNFlowLightsOff);  // 5:00pm every day (1am -> 5pm = 18 hours)
   aero2AlarmOnID = Alarm.alarmRepeat(1, 00, 0, turnRow2LightsOn);            // 1:00am every day
   aero2AlarmOffID = Alarm.alarmRepeat(17, 00, 0, turnRow2LightsOff);         // 5:00pm every day (1am -> 5pm = 18 hours)
+  Alarm.timerRepeat(60, updateTime);                                         //update every minute
 
-  resyncToSchedule();
+  //REQUEST INFO
+  requestInfo();  //request all the info
+  count = 0;
+  while (count < 500) {
+    Serial.println("Polling for info!");
+    mqttClient.poll();
+    count++;
+  }
+
+  //SYNC TO SCHEDULE
+  resyncToSchedule();  //if the lights should be on, turn them on
 }
 
 void loop() {
@@ -94,12 +115,20 @@ void loop() {
 void resyncToSchedule() {
   //TURN ON LIGHTS IF NEEDED
   //might have to change this logic if changing the time on/off
+
+  Serial.println("Syncing to schedule");
+  Serial.println("Time on: " + String(Alarm.read(ebbNFlowAlarmOnID)));
+  Serial.println("Current time: " + String(secondsAfterMidnight()));
+  Serial.println("Time off: " + String(Alarm.read(ebbNFlowAlarmOffID)));
+
   if (secondsAfterMidnight() > Alarm.read(ebbNFlowAlarmOnID) && secondsAfterMidnight() < Alarm.read(ebbNFlowAlarmOffID)) {
+    Serial.println("After on time, before off time for ebbNFlow");
     turnEbbNFlowLightsOn();
   } else {
     turnEbbNFlowLightsOff();
   }
   if (secondsAfterMidnight() > Alarm.read(aero2AlarmOnID) && secondsAfterMidnight() < Alarm.read(aero2AlarmOffID)) {
+    Serial.println("After on time, before off time for aero 2");
     turnRow2LightsOn();
   } else {
     turnRow2LightsOff();
@@ -176,14 +205,14 @@ void printTimeAndDate() {
 
 void saveTime(char* inputString) {
   char timeStr[50];
-  strcpy(timeStr,inputString);
+  strcpy(timeStr, inputString);
   Serial.println("We received: ");
-  Serial.println(timeStr); //expecting of form "2022-11-23, 13:34"
-  char* yearHA = strtok(timeStr,"-");
-  char* monthHA = strtok(NULL,"-");
-  char* dayHA = strtok(NULL,",");
-  char* hourHA = strtok(NULL,":");
-  char* minuteHA = strtok(NULL,":");
+  Serial.println(timeStr);  //expecting of form "2022-11-23, 13:34"
+  char* yearHA = strtok(timeStr, "-");
+  char* monthHA = strtok(NULL, "-");
+  char* dayHA = strtok(NULL, ",");
+  char* hourHA = strtok(NULL, ":");
+  char* minuteHA = strtok(NULL, ":");
   setTime(atoi(hourHA), atoi(minuteHA), 0, atoi(dayHA), atoi(monthHA), atoi(yearHA));
   printTimeAndDate();
 }
@@ -191,6 +220,7 @@ void saveTime(char* inputString) {
 void onMqttMessage(int messageSize) {
 
   String topic = mqttClient.messageTopic();
+  Serial.println(topic);
   if (topic == "Desoto/Lights/EbbNFlow/command") {
     Serial.println("Should toggle EbbNFlow lights");
     readMessage();
@@ -268,10 +298,12 @@ void onMqttMessage(int messageSize) {
     readMessage();
     Serial.println("Received message: " + String(mqttMessage));
     saveTime(mqttMessage);
+    isTimeSet = true;
   } else {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
   }
+  Serial.println();
 }
 
 void askForTime() {
@@ -279,5 +311,40 @@ void askForTime() {
   char topic[] = "homeassistant/requestTime";
   mqttClient.beginMessage(topic);
   mqttClient.print("requesting time");  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
+}
+
+//publish what time we think it is
+void updateTime() {
+  Serial.println("Updating expected time");
+  char topic[] = "Desoto/Lights/expectedTime";
+  String message = String(hour()) + ":" + String(minute()) + ":" + String(second());
+  bool retained = false;
+  int qos = 1;
+  bool dup = false;
+  mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
+  mqttClient.print(message);  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
+}
+
+void requestInfo() {
+  Serial.println("Request Updated Information");
+  char topic[] = "Desoto/Lights/requestInfo";
+  mqttClient.beginMessage(topic);
+  mqttClient.print("Send the info!");  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
+}
+
+
+void publishIP() {
+  IPAddress address = WiFi.localIP();
+  String message = String(address[0]) + "." + String(address[1]) + "." + String(address[2]) + "." + String(address[3]);  //convert to String
+  char topic[] = "Desoto/Lights/IPAddress";
+  bool retained = true;
+  int qos = 1;
+  bool dup = false;
+  Serial.println("IP: " + message);
+  mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
+  mqttClient.print(message);  //triggers message in telegram through node red on home assistant
   mqttClient.endMessage();
 }

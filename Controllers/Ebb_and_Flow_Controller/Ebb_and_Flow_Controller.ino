@@ -41,15 +41,15 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Beginning...");
 
+  //CONFIGURE PINS
   pinMode(pumpPin, OUTPUT);
   digitalWrite(pumpPin, LOW);  //turn pump off
-
   for (int i = 0; i < nbrOfSolenoids; i++) {
     pinMode(solenoidPins[i], OUTPUT);
     digitalWrite(solenoidPins[i], LOW);  //turn solenoids off
   }
 
-  //initialize flags
+  //INITIALIZE FLAGS
   for (int i = 0; i < nbrOfSolenoids + 1; i++) {
     waterLevelFlags[i] = false;
   }
@@ -84,18 +84,24 @@ void setup() {
   watering2AlarmID = Alarm.alarmRepeat(12, 00, 0, waterLevels);
   watering3AlarmID = Alarm.alarmRepeat(17, 00, 0, waterLevels);
   watering4AlarmID = Alarm.alarmRepeat(22, 00, 0, waterLevels);
+
+  Alarm.timerRepeat(60,updateTime); // every minute, publish what time we think it is
 }
 
 //--------------LOOP---------------
 void loop() {
-  Alarm.delay(0);  //needed to service alarms
-
-  mqttClient.poll();  // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
-
+  serviceCalls();
+  
   if (!mqttClient.connected()) connectToBroker();
   if (WiFi.status() != WL_CONNECTED) connectToWifi();
 
   checkWateringFlags();
+}
+
+//these should be very quick
+void serviceCalls() {
+  Alarm.delay(0);  //needed to service alarms
+  mqttClient.poll();  // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
 }
 
 void checkWateringFlags() {
@@ -228,7 +234,7 @@ void myDelay(long delayTime, bool shouldPrint = false) {
       Serial.println("Time left: " + String((delayTime - (millis() - startTime)) / 1000) + " seconds");
       printTime = millis();
     }
-    mqttClient.poll();
+    serviceCalls();
   }
 }
 
@@ -295,7 +301,7 @@ void waterLevel(int level) {
       printToBroker(String(secondsLeft) + " seconds left in watering " + String(level));
       prevSecondsLeft = secondsLeft;
     }
-    mqttClient.poll();
+    serviceCalls();
   }
 
   //turn off pump
@@ -313,7 +319,7 @@ void waterLevel(int level) {
       printToBroker(String(secondsLeft) + " seconds left in draining " + String(level));
       prevSecondsLeft = secondsLeft;
     }
-    mqttClient.poll();
+    serviceCalls();
   }
   //turn off solenoid
   digitalWrite(solenoidPins[levelInx], LOW);
@@ -648,5 +654,18 @@ void askForTime() {
   char topic[] = "homeassistant/requestTime";
   mqttClient.beginMessage(topic);
   mqttClient.print("requesting time");  //triggers message in telegram through node red on home assistant
+  mqttClient.endMessage();
+}
+
+//publish what time we think it is
+void updateTime() {
+  Serial.println("Updating expected time");
+  char topic[] = "Desoto/EbbNFlow/expectedTime";
+  String message = String(hour()) + ":" + String(minute()) + ":" + String(second());
+  bool retained = false;
+  int qos = 1;
+  bool dup = false;
+  mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
+  mqttClient.print(message);  //triggers message in telegram through node red on home assistant
   mqttClient.endMessage();
 }
