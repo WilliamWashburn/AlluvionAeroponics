@@ -5,6 +5,8 @@
 
 #include <Wire.h>
 
+#include "wifiFunctions.h"
+
 #define sensorAddress 0x28  //Given by the part number (See page 13 of the datasheet). The 2 means the address is 0x28
 //150PG is gage pressre from 0 psi to 150 psi
 float minPressure = 0.0;    //psi
@@ -25,31 +27,48 @@ uint8_t status;           //status of sensor
 uint16_t pressure_bytes;  //count -> pressure
 uint16_t temp_bytes;
 
+float tempF;
+float pressurePSI;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
-  Wire.begin();
+  Serial.begin(9600);
+  Wire.begin(2,0);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
 }
 
 void loop() {
   static long prevTime = 0;
   if (millis() - prevTime > 2000) {
+
+    Serial.println("Reading pressure");
     readPressure();
+    client.publish("Sensors/pressureSensor/pressure", String(pressurePSI).c_str());
+    client.publish("Sensors/pressureSensor/temperature", String(tempF).c_str());
     prevTime = millis();
   }
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
 }
 
 void readPressure() {
-  grabRawData();                 //read the 4 bytes from the sensor
-  rearrangeBits();               //rearrange bytes into 2 bits for the status, 14 bits for the pressure, and 11 bits for the temperature
-  if (checkForError()) return;   //exit if status is not normal operation
+  grabRawData();                //read the 4 bytes from the sensor
+  rearrangeBits();              //rearrange bytes into 2 bits for the status, 14 bits for the pressure, and 11 bits for the temperature
+  if (checkForError()) return;  //exit if status is not normal operation
 
-  float outputPressure = applyPressureTransferFunction(pressure_bytes); //convert count to pressure
-  float tempF = applyTemperatureTransferFunction(temp_bytes); //convert value to temperature
+  pressurePSI = applyPressureTransferFunction(pressure_bytes);  //convert count to pressure
+  tempF = applyTemperatureTransferFunction(temp_bytes);         //convert value to temperature
 
-  Serial.print("Pressure: ");Serial.print(outputPressure);Serial.println(" psi");
-  Serial.print("Temperature: ");Serial.print(tempF);Serial.println(" F");
+  Serial.print("Pressure: ");
+  Serial.print(pressurePSI);
+  Serial.println(" psi");
+  Serial.print("Temperature: ");
+  Serial.print(tempF);
+  Serial.println(" F");
 
   Serial.println();
 }
