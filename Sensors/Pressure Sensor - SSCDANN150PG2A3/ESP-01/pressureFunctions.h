@@ -25,32 +25,20 @@ uint8_t status;           //status of sensor
 uint16_t pressure_bytes;  //count -> pressure
 uint16_t temp_bytes;
 
+float tempF;
+float pressurePSI;
 
-void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(115200);
-  Wire.begin();
-}
-
-void loop() {
-  static long prevTime = 0;
-  if (millis() - prevTime > 2000) {
-    readPressure();
-    prevTime = millis();
+void printBits(uint8_t byte) {
+  for (int i = 7; i >= 0; i--) {
+    Serial.print(bitRead(byte, i));
   }
+  Serial.println();
 }
 
-void readPressure() {
-  grabRawData();                 //read the 4 bytes from the sensor
-  rearrangeBits();               //rearrange bytes into 2 bits for the status, 14 bits for the pressure, and 11 bits for the temperature
-  if (checkForError()) return;   //exit if status is not normal operation
-
-  float outputPressure = applyPressureTransferFunction(pressure_bytes); //convert count to pressure
-  float tempF = applyTemperatureTransferFunction(temp_bytes); //convert value to temperature
-
-  Serial.print("Pressure: ");Serial.print(outputPressure);Serial.println(" psi");
-  Serial.print("Temperature: ");Serial.print(tempF);Serial.println(" F");
-
+void printBits(uint16_t byte) {
+  for (int i = 15; i >= 0; i--) {
+    Serial.print(bitRead(byte, i));
+  }
   Serial.println();
 }
 
@@ -121,16 +109,20 @@ void rearrangeBits() {
   temp_bytes = ((uint16_t)bytesReceived[2] << 3) + ((bytesReceived[3] & 0b11100000) >> 5);
 }
 
-void printBits(uint8_t byte) {
-  for (int i = 7; i >= 0; i--) {
-    Serial.print(bitRead(byte, i));
-  }
-  Serial.println();
-}
+void readPressure() {
+  grabRawData();                //read the 4 bytes from the sensor
+  rearrangeBits();              //rearrange bytes into 2 bits for the status, 14 bits for the pressure, and 11 bits for the temperature
+  if (checkForError()) return;  //exit if status is not normal operation
 
-void printBits(uint16_t byte) {
-  for (int i = 15; i >= 0; i--) {
-    Serial.print(bitRead(byte, i));
-  }
+  pressurePSI = applyPressureTransferFunction(pressure_bytes);  //convert count to pressure
+  tempF = applyTemperatureTransferFunction(temp_bytes);         //convert value to temperature
+
+  Serial.print("Pressure: ");
+  Serial.print(pressurePSI);
+  Serial.println(" psi");
+  Serial.print("Temperature: ");
+  Serial.print(tempF);
+  Serial.println(" F");
+
   Serial.println();
 }
