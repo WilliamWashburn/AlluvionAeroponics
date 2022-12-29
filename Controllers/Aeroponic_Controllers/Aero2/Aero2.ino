@@ -100,7 +100,6 @@ void setup() {
 }
 
 void loop() {
-  checkWifiConnection();
   Alarm.delay(0);  //needed to service alarms
 
   // call poll() regularly to allow the library to receive MQTT messages and
@@ -405,21 +404,5 @@ void onMqttMessage(int messageSize) {
   } else {
     Serial.print("Update not recognized: ");
     Serial.println(topic);
-  }
-}
-
-//WIFI
-void checkWifiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Disconnected from wifi!");
-
-    WiFi.begin(ssid, password);
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("");
-      Serial.println("WiFi connected");
-      Serial.println("IP address: ");
-      Serial.println(WiFi.localIP());
-    }
   }
 }
