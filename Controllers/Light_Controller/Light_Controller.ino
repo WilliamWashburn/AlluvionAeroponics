@@ -136,18 +136,18 @@ void resyncToSchedule() {
   }
 }
 
+//TIME FUNCTIONS
 int secondsAfterMidnight() {
   return hour() * 3600 + minute() * 60 + second();
 }
-
 long convertTimeToSecondsAfterMidnight(int hourTime, int minuteTime, int secondTime = 0) {
   return hourTime * 3600L + minuteTime * 60L + secondTime;
 }
-
 long convertTimeToSecondsAfterMidnight(char hourTime[], char minuteTime[], char secondTime[] = "0") {
   return atoi(hourTime) * 3600L + atoi(minuteTime) * 60L + atoi(secondTime);
 }
 
+//EBB N FLOW
 void turnEbbNFlowLightsOn() {
   digitalWrite(lightPins[0], HIGH);
   //Publish to MQTT broker so we can log the event
@@ -162,18 +162,21 @@ void turnEbbNFlowLightsOff() {
   mqttClient.endMessage();
 }
 
-bool ebbNFlowLightsState() {
-  return digitalRead(lightPins[0]);
-}
-
-//need to update to match row 2
+//ROW 1
 void turnRow1LightsOn() {
   digitalWrite(lightPins[1], HIGH);
+  mqttClient.beginMessage("Desoto/Lights/Aero1/state");
+  mqttClient.print("{\"state\":\"on\"}");
+  mqttClient.endMessage();
 }
 void turnRow1LightsOff() {
   digitalWrite(lightPins[1], LOW);
+  mqttClient.beginMessage("Desoto/Lights/Aero1/state");
+  mqttClient.print("{\"state\":\"on\"}");
+  mqttClient.endMessage();
 }
 
+//ROW 2
 void turnRow2LightsOn() {
   digitalWrite(lightPins[2], HIGH);
   mqttClient.beginMessage("Desoto/Lights/Aero2/state");
@@ -187,16 +190,32 @@ void turnRow2LightsOff() {
   mqttClient.endMessage();
 }
 
-bool row2LightsState() {
-  return digitalRead(lightPins[2]);
-}
-
-//need to update to match row 2
+//ROW 3
 void turnRow3LightsOn() {
   digitalWrite(lightPins[3], HIGH);
+  mqttClient.beginMessage("Desoto/Lights/Aero3/state");
+  mqttClient.print("{\"state\":\"on\"}");
+  mqttClient.endMessage();
 }
 void turnRow3LightsOff() {
   digitalWrite(lightPins[3], LOW);
+  mqttClient.beginMessage("Desoto/Lights/Aero3/state");
+  mqttClient.print("{\"state\":\"on\"}");
+  mqttClient.endMessage();
+}
+
+//for checking the state of the lights
+bool ebbNFlowLightsState() {
+  return digitalRead(lightPins[0]);
+}
+bool row1LightsState() {
+  return digitalRead(lightPins[1]);
+}
+bool row2LightsState() {
+  return digitalRead(lightPins[2]);
+}
+bool row3LightsState() {
+  return digitalRead(lightPins[3]);
 }
 
 void printTimeAndDate() {
@@ -240,6 +259,24 @@ void onMqttMessage(int messageSize) {
       Serial.print(" and message: ");
       Serial.println(mqttMessage);
     }
+  } else if (topic == "Desoto/Lights/Aero1/command") {
+    Serial.println("Should toggle Aero1 lights");
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
+      if (!row1LightsState()) {  //if not on
+        turnRow1LightsOn();
+      }
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
+      if (row1LightsState()) {  //if on
+        turnRow1LightsOff();
+      }
+    } else {
+      Serial.print("message not recognized for topic: ");
+      Serial.print(topic);
+      Serial.print(" and message: ");
+      Serial.println(mqttMessage);
+    }
   } else if (topic == "Desoto/Lights/Aero2/command") {
     Serial.println("Should toggle Aero2 lights");
     readMessage();
@@ -258,9 +295,31 @@ void onMqttMessage(int messageSize) {
       Serial.print(" and message: ");
       Serial.println(mqttMessage);
     }
+  } else if (topic == "Desoto/Lights/Aero3/command") {
+    Serial.println("Should toggle Aero3 lights");
+    readMessage();
+    Serial.println("Received message: " + String(mqttMessage));
+    if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
+      if (!row3LightsState()) {  //if not on
+        turnRow3LightsOn();
+      }
+    } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
+      if (row3LightsState()) {  //if on
+        turnRow3LightsOff();
+      }
+    } else {
+      Serial.print("message not recognized for topic: ");
+      Serial.print(topic);
+      Serial.print(" and message: ");
+      Serial.println(mqttMessage);
+    }
   } else if (topic == "Desoto/Lights/EbbNFlow/state") {
     //do nothing
+  } else if (topic == "Desoto/Lights/Aero1/state") {
+    //do nothing
   } else if (topic == "Desoto/Lights/Aero2/state") {
+    //do nothing
+  } else if (topic == "Desoto/Lights/Aero3/state") {
     //do nothing
   } else if (topic == "Desoto/Lights/resync") {
     resyncToSchedule();
