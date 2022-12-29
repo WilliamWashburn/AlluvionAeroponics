@@ -1,4 +1,4 @@
-#include "credentials.h" //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
+#include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
 #include "ntpFunctions.h"
 
 #include <TimeLib.h>
@@ -10,6 +10,7 @@
 #include <ArduinoMqttClient.h>
 
 int solenoidPins[] = { 15, 33, 27 };
+int feedbackPin = 32;
 int nbrOfPins = 3;
 
 const char* ssid = mySSID;
@@ -20,7 +21,10 @@ MqttClient mqttClient(wifiClient);
 
 const char broker[] = "homeassistant.local";
 int port = 1883;
-const char topic[] = "Desoto/Aero2/#";
+const char topic[] = "Desoto/Aero2/#";                      //for reading from
+const char sprayTopic1[] = "Desoto/Aero2/solenoid1/state";  //for updating when sprayed
+const char sprayTopic2[] = "Desoto/Aero2/solenoid2/state";
+const char sprayTopic3[] = "Desoto/Aero2/solenoid3/state";
 
 //for turning off individual zones
 bool cycleSolenoid1 = true;
@@ -38,6 +42,7 @@ void setup() {
 
   for (int i = 0; i < nbrOfPins; i++) {
     pinMode(solenoidPins[i], OUTPUT);
+    pinMode(feedbackPin, INPUT);
     digitalWrite(solenoidPins[i], LOW);
   }
 
@@ -118,11 +123,70 @@ void cycleThroughSolenoids() {
       Serial.println("Dont cycle solenoid 3");
     } else {
       digitalWrite(solenoidPins[i], HIGH);
-      Alarm.delay(wateringDurations[i] * 1000);  //need to fix: prevents commands
+      delayWhileSpraying(wateringDurations[i] * 1000, i + 1);
       digitalWrite(solenoidPins[i], LOW);
-      Alarm.delay(500);
+      customDelay(1000);
     }
   }
+}
+
+void delayWhileSpraying(long timeToDelayMilli, int solenoidSpraying) {
+  long startTime = millis();
+  static bool updateMessageSent = false;  //flag so that once it starts spraying, it only sends 1 mqtt message
+  while (millis() - startTime < timeToDelayMilli) {
+    //all of these functions need to be quick and none blocking.
+    Alarm.delay(0);     //service alarms
+    mqttClient.poll();  //check for mqtt messages
+
+    if (!updateMessageSent) {
+      if (updateIfSpraying(solenoidSpraying)) {
+        updateMessageSent = true;
+        Serial.println("updateMessageSent set true");
+      }
+    }
+  }
+  if (!updateMessageSent) {
+    Serial.println("No spraying detected!");
+    beginMessageForSolenoidFeedback(solenoidSpraying);
+    mqttClient.print("No spraying detected!"); //if supposed to spray but doesn't
+    mqttClient.endMessage();
+  } else {
+    beginMessageForSolenoidFeedback(solenoidSpraying);
+    mqttClient.print("Not spraying"); //when the spraying stops
+    mqttClient.endMessage();
+    updateMessageSent = false;  //reset flag after delay
+    Serial.println("updateMessageSent reset to false");
+    Serial.println();
+  }
+}
+
+void customDelay(long timeToDelayMilli) {
+  long startTime = millis();
+  while (millis() - startTime < timeToDelayMilli) {
+    Alarm.delay(0);     //service alarms
+    mqttClient.poll();  //check for mqtt messages
+  }
+}
+
+void beginMessageForSolenoidFeedback(int solenoidSpraying) {
+  if (solenoidSpraying == 1) {
+    mqttClient.beginMessage(sprayTopic1);
+  } else if (solenoidSpraying == 2) {
+    mqttClient.beginMessage(sprayTopic2);
+  } else if (solenoidSpraying == 3) {
+    mqttClient.beginMessage(sprayTopic3);
+  }
+}
+
+bool updateIfSpraying(int solenoidSpraying) {
+  if (digitalRead(feedbackPin)) {  //if spraying
+    beginMessageForSolenoidFeedback(solenoidSpraying);
+    mqttClient.print("Spraying");
+    mqttClient.endMessage();
+    Serial.println("mqtt message sent");
+    return true;
+  }
+  return false;
 }
 
 //TURN ON SOLENOID
@@ -293,7 +357,7 @@ void onMqttMessage(int messageSize) {
       // Serial.print((char)mqttClient.read());
     }
     message[inx] = '\0';  //null terminate
-    Serial.println(atoi(message));
+    Serial.println(message);
 
     wateringDurations[0] = atoi(message);
 
