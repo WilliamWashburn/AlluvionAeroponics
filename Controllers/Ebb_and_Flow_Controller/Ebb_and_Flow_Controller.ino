@@ -33,6 +33,7 @@ long levelLastWatered[] = { -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HO
 long levelWaterDurations[] = { 6, 4, 6, 12, 12, 12, 12 };                                                                                                                                //minutes. how long each level should water for
 long levelDrainDurations[] = { 21, 12, 12, 12, 22, 22, 22 };                                                                                                                             //minutes. how long each level should drain for
 int pumpPWMTime = 8000;                                                                                                                                                                  //milliseconds. How long the pump should pwm for
+bool levelWateringStatus[] = { false, false, false, false, false, false, false };                                                                                                        //which levels should water during each watering event
 
 bool waterLevelFlags[nbrOfSolenoids + 1];  //flags to water levels. The last index is for watering all the levels
 
@@ -98,13 +99,13 @@ void setup() {
   watering3AlarmID = Alarm.alarmRepeat(17, 00, 0, waterLevels);
   watering4AlarmID = Alarm.alarmRepeat(22, 00, 0, waterLevels);
 
-  Alarm.timerRepeat(60,updateTime); // every minute, publish what time we think it is
+  Alarm.timerRepeat(60, updateTime);  // every minute, publish what time we think it is
 }
 
 //--------------LOOP---------------
 void loop() {
   serviceCalls();
-  
+
   if (!mqttClient.connected()) connectToBroker();
   if (WiFi.status() != WL_CONNECTED) connectToWifi();
 
@@ -113,7 +114,7 @@ void loop() {
 
 //these should be very quick
 void serviceCalls() {
-  Alarm.delay(0);  //needed to service alarms
+  Alarm.delay(0);     //needed to service alarms
   mqttClient.poll();  // call poll() regularly to allow the library to receive MQTT messages and send MQTT keep alives which avoids being disconnected by the broker
 }
 
@@ -556,6 +557,45 @@ void onMqttMessage(int messageSize) {
     Alarm.write(watering4AlarmID, scheduledTime);
   }
 
+  // level watering statuses
+  else if (topic == "Desoto/EbbNFlow/watering/statuses/1") {
+    readMessage();
+    if (strcmp(mqttMessage, "on") == 0) {
+      printToBroker("enabling level 1");
+      levelWateringStatus[0] = true;
+    } else if (strcmp(mqttMessage, "off") == 0) {
+      printToBroker("disabling level 1");
+      levelWateringStatus[0] = false;
+    } else parsingError = true;
+  } else if (topic == "Desoto/EbbNFlow/watering/statuses/2") {
+    readMessage();
+    if (strcmp(mqttMessage, "on") == 0) {
+      printToBroker("enabling level 2");
+      levelWateringStatus[1] = true;
+    } else if (strcmp(mqttMessage, "off") == 0) {
+      printToBroker("disabling level 2");
+      levelWateringStatus[1] = false;
+    } else parsingError = true;
+  } else if (topic == "Desoto/EbbNFlow/watering/statuses/3") {
+    readMessage();
+    if (strcmp(mqttMessage, "on") == 0) {
+      printToBroker("enabling level 3");
+      levelWateringStatus[2] = true;
+    } else if (strcmp(mqttMessage, "off") == 0) {
+      printToBroker("disabling level 3");
+      levelWateringStatus[2] = false;
+    } else parsingError = true;
+  } else if (topic == "Desoto/EbbNFlow/watering/statuses/4") {
+    readMessage();
+    if (strcmp(mqttMessage, "on") == 0) {
+      printToBroker("enabling level 4");
+      levelWateringStatus[3] = true;
+    } else if (strcmp(mqttMessage, "off") == 0) {
+      printToBroker("disabling level 4");
+      levelWateringStatus[3] = false;
+    } else parsingError = true;
+  }
+
   //TRIGGER DRAINING
   else if (topic == "Desoto/EbbNFlow/watering/drain") {
     printToBroker("Should drain levels");
@@ -680,7 +720,7 @@ void updateTime() {
   int qos = 1;
   bool dup = false;
   mqttClient.beginMessage(topic, message.length(), retained, qos, dup);
-  mqttClient.print(message);  //triggers message in telegram through node red on home assistant
+  mqttClient.print(message);
   mqttClient.endMessage();
 }
 
