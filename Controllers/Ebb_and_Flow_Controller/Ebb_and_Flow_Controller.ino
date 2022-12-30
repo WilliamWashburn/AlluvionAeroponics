@@ -616,6 +616,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     printToBroker("Received message: " + String(mqttMessage));
     saveTime(mqttMessage);
+    updateTime(); //confirmation
   }
 
   // WATERING SCHEDULE STATUS
