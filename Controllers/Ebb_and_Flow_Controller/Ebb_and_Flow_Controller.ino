@@ -282,19 +282,24 @@ void pwmPump() {
 }
 
 void waterLevel(int level) {
+  int levelInx = level - 1;  //adjust so level 1 is index 0
+
+  //we this level isn't supposed to water, return
+  if (levelWateringStatus[levelInx] == false) {
+    printToBroker("Level " + String(level) + " is not enabled");
+    return;
+  }
+
   turnOffSolenoids();  //just incase one is open
 
-  //build mqtt topic for updating state of watering
+  Serial.println("Starting to water for " + String(levelWaterDurations[levelInx] * 60L) + " seconds");
+  levelLastWatered[levelInx] = millis();  //update record of timing
+
+  //build mqtt topic for updating state of watering and publish
   char updateTopic[50] = "Desoto/EbbNFlow/watering/";
   char levelNbrAsChar[4];
   strcat(updateTopic, itoa(level, levelNbrAsChar, 10));
   strcat(updateTopic, "/wateringUpdate");
-
-  int levelInx = level - 1;  //adjust so level 1 is index 0
-  Serial.println("Starting to water for " + String(levelWaterDurations[levelInx] * 60L) + " seconds");
-  levelLastWatered[levelInx] = millis();  //update record of timing
-
-  //update to mqtt
   mqttClient.beginMessage(updateTopic);
   mqttClient.print("starting to water");  //triggers message in telegram through node red on home assistant
   mqttClient.endMessage();
@@ -321,12 +326,14 @@ void waterLevel(int level) {
   //turn off pump
   digitalWrite(pumpPin, LOW);
 
+  //publish start to drain message
   mqttClient.beginMessage(updateTopic);
   mqttClient.print("starting to drain");
   mqttClient.endMessage();
+
+  //drain
   long startDrain = millis();
   while (millis() - startDrain < levelDrainDurations[levelInx] * MINTOMILLISEC) {
-    //pass
     int secondsLeft = (int)((levelDrainDurations[levelInx] * MINTOMILLISEC) - (millis() - startDrain)) / 1000;
     static int prevSecondsLeft = 0;
     if (secondsLeft != prevSecondsLeft) {
@@ -335,6 +342,7 @@ void waterLevel(int level) {
     }
     serviceCalls();
   }
+
   //turn off solenoid
   digitalWrite(solenoidPins[levelInx], LOW);
 
@@ -557,7 +565,7 @@ void onMqttMessage(int messageSize) {
     Alarm.write(watering4AlarmID, scheduledTime);
   }
 
-  // level watering statuses
+  // level watering statuses. If that level should water during a watering event
   else if (topic == "Desoto/EbbNFlow/watering/statuses/1") {
     readMessage();
     if (strcmp(mqttMessage, "on") == 0) {
@@ -616,7 +624,7 @@ void onMqttMessage(int messageSize) {
     readMessage();
     printToBroker("Received message: " + String(mqttMessage));
     saveTime(mqttMessage);
-    updateTime(); //confirmation
+    updateTime();  //confirmation
   }
 
   // WATERING SCHEDULE STATUS
