@@ -33,7 +33,7 @@ long levelLastWatered[] = { -24 * HOURTOMILLISEC, -24 * HOURTOMILLISEC, -24 * HO
 long levelWaterDurations[] = { 6, 4, 6, 12, 12, 12, 12 };                                                                                                                                //minutes. how long each level should water for
 long levelDrainDurations[] = { 21, 12, 12, 12, 22, 22, 22 };                                                                                                                             //minutes. how long each level should drain for
 int pumpPWMTime = 8000;                                                                                                                                                                  //milliseconds. How long the pump should pwm for
-bool levelWateringStatus[] = { false, false, false, false, false, false, false };                                                                                                        //which levels should water during each watering event
+bool levelWateringStatus[] = { true, true, true, true, true, true, true };                                                                                                        //which levels should water during each watering event
 
 bool waterLevelFlags[nbrOfSolenoids + 1];  //flags to water levels. The last index is for watering all the levels
 
@@ -121,7 +121,7 @@ void serviceCalls() {
 void checkWateringFlags() {
   for (int i = 0; i < nbrOfSolenoids; i++) {
     if (waterLevelFlags[i]) {
-      Serial.println("Watering level " + String(i));
+      Serial.println("Watering level " + String(i + 1));
       waterLevel(i + 1);
       waterLevelFlags[i] = false;
     }
@@ -284,7 +284,7 @@ void pwmPump() {
 void waterLevel(int level) {
   int levelInx = level - 1;  //adjust so level 1 is index 0
 
-  //we this level isn't supposed to water, return
+  //this level isn't supposed to water, return
   if (levelWateringStatus[levelInx] == false) {
     printToBroker("Level " + String(level) + " is not enabled");
     return;
