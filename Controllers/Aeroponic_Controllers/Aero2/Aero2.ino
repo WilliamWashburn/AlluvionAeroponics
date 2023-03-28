@@ -11,7 +11,7 @@
 
 int solenoidPins[] = { 15, 33, 27 };
 int feedbackPin = 32;
-int nbrOfPins = 3;
+int nbrOfSolenoids = 3;
 
 const char* ssid = mySSID;
 const char* password = myPASSWORD;
@@ -40,7 +40,7 @@ void setup() {
 
   Serial.begin(115200);
 
-  for (int i = 0; i < nbrOfPins; i++) {
+  for (int i = 0; i < nbrOfSolenoids; i++) {
     pinMode(solenoidPins[i], OUTPUT);
     pinMode(feedbackPin, INPUT);
     digitalWrite(solenoidPins[i], LOW);
@@ -113,20 +113,26 @@ void cycleThroughSolenoids() {
   mqttClient.print("hello!");
   mqttClient.endMessage();
 
-  for (int i = 0; i < nbrOfPins; i++) {
-    if (i == 0 && cycleSolenoid1 == false) {
+  static int whichSolenoidToStart = 0;
+  int whichSolenoid; //initialize
+
+  for (int count = 0; count < nbrOfSolenoids; count++) { 
+    whichSolenoid = (whichSolenoidToStart + count) % nbrOfSolenoids;
+    if (whichSolenoid == 0 && cycleSolenoid1 == false) {
       Serial.println("Dont cycle solenoid 1");
-    } else if (i == 1 && cycleSolenoid2 == false) {
+    } else if (whichSolenoid == 1 && cycleSolenoid2 == false) {
       Serial.println("Dont cycle solenoid 2");
-    } else if (i == 2 && cycleSolenoid3 == false) {
+    } else if (whichSolenoid == 2 && cycleSolenoid3 == false) {
       Serial.println("Dont cycle solenoid 3");
     } else {
-      digitalWrite(solenoidPins[i], HIGH);
-      delayWhileSpraying(wateringDurations[i] * 1000, i + 1);
-      digitalWrite(solenoidPins[i], LOW);
+      digitalWrite(solenoidPins[whichSolenoid], HIGH);
+      delayWhileSpraying(wateringDurations[whichSolenoid] * 1000, whichSolenoid + 1);
+      digitalWrite(solenoidPins[whichSolenoid], LOW);
       customDelay(1000);
     }
   }
+  whichSolenoidToStart++; //increment
+  whichSolenoidToStart%=nbrOfSolenoids; //wrap around if greater than nbrOfSolenoids
 }
 
 void delayWhileSpraying(long timeToDelayMilli, int solenoidSpraying) {
