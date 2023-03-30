@@ -378,6 +378,12 @@ void onMqttMessage(int messageSize) {
     Serial.println("Ignored mqttTopic");
   } else if (mqttTopic == "Desoto/Aero3/statusUpdate") {
     Serial.println("Ignored mqttTopic");
+  } else if (mqttTopic == "Desoto/Aero3/solenoid1/state") {
+    Serial.println("Ignored mqttTopic");
+  } else if (mqttTopic == "Desoto/Aero3/solenoid2/state") {
+    Serial.println("Ignored mqttTopic");
+  } else if (mqttTopic == "Desoto/Aero3/solenoid3/state") {
+    Serial.println("Ignored mqttTopic");
   }
   
   else {
