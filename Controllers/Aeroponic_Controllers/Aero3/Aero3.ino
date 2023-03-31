@@ -26,8 +26,8 @@ bool cycleSolenoid1 = true;
 bool cycleSolenoid2 = true;
 bool cycleSolenoid3 = true;
 
-int wateringDurations[] = { 7, 7, 7 };
-long wateringDelay = 60;  //default
+int wateringDurations[] = { 7, 7, 7 }; //seconds
+long wateringDelay = 240;  //default, seconds
 
 AlarmId wateringAlarmID;
 
@@ -260,7 +260,7 @@ void onMqttMessage(int messageSize) {
     mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     long wateringDelay = atoi(mqttMessage);
-    printUpdateToHomeAssistant(&mqttClient,"Updating delay to :" + String(wateringDelay));
+    printUpdateToHomeAssistant(&mqttClient,"Updating delay to: " + String(wateringDelay));
     Alarm.write(wateringAlarmID, wateringDelay);
   }
 
