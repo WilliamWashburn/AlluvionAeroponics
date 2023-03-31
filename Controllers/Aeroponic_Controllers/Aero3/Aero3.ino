@@ -1,5 +1,5 @@
 #include "credentials.h"  //you need to create this file and #define mySSID and myPASSWORD. or comment this out and fill in below
-#include "ntpFunctions.h"
+#include "ntp.h"
 
 #include <TimeLib.h>
 #include <TimeAlarms.h>
@@ -9,8 +9,10 @@
 #include <WiFiUdp.h>
 #include <ArduinoMqttClient.h>
 
-int solenoidPins[] = { 15, 33, 27 };
-int feedbackPin = 32;
+#include "mqttFunctions.h"
+#include "wifi.h"
+#include "watering.h"
+
 int nbrOfSolenoids = 3;
 
 const char* ssid = mySSID;
@@ -19,22 +21,15 @@ const char* password = myPASSWORD;
 WiFiClient wifiClient;
 MqttClient mqttClient(wifiClient);
 
-const char broker[] = "homeassistant.local";
-int port = 1883;
-const char topic[] = "Desoto/Aero3/#";                      //for reading from
-const char sprayTopic1[] = "Desoto/Aero3/solenoid1/state";  //for updating when sprayed
-const char sprayTopic2[] = "Desoto/Aero3/solenoid2/state";
-const char sprayTopic3[] = "Desoto/Aero3/solenoid3/state";
-
 //for turning off individual zones
 bool cycleSolenoid1 = true;
 bool cycleSolenoid2 = true;
 bool cycleSolenoid3 = true;
 
 int wateringDurations[] = { 7, 7, 7 };
+long wateringDelay = 60;  //default
 
 AlarmId wateringAlarmID;
-long wateringDelay = 60;  //default
 
 void setup() {
 
@@ -73,45 +68,15 @@ void setup() {
   Serial.println("Date: " + String(month()) + "/" + String(day()) + "/" + String(year()));
 
   //CONNECT TO MQTT BROKER
-  Serial.print("Attempting to connect to the MQTT broker: ");
-  Serial.println(broker);
-  mqttClient.setUsernamePassword(mqttUser, mqttPass);
-  if (!mqttClient.connect(broker, port)) {
-    Serial.print("MQTT connection failed! Error code = ");
-    Serial.println(mqttClient.connectError());
-
-    while (1)
-      ;
-  }
-  Serial.println("You're connected to the MQTT broker!");
-  Serial.println();
   // set the message receive callback
   mqttClient.onMessage(onMqttMessage);
-  Serial.print("Subscribing to topic: ");
-  Serial.println(topic);
-  Serial.println();
-  // subscribe to a topic
-  mqttClient.subscribe(topic);
+  connectToBroker(&mqttClient);
+
+  printUpdateToHomeAssistant(&mqttClient,"Connected to Homeassistant!");
 
   //SET ALARMS
   wateringAlarmID = Alarm.timerRepeat(wateringDelay, cycleThroughSolenoids);
-  // cycleThroughSolenoids();
-  // Serial.println("Value: " + String(Alarm.read(wateringAlarmID)));
-}
-
-void checkWiFiConnection() {
-  static int connectCount = 0;
-  if (!WiFi.isConnected()) {
-    WiFi.reconnect();
-    connectCount++;
-    Serial.println("Connection lost. Reconnecting");
-    //if we had to reconnect more than 10 times and we have been alive for more than 10 minutes (so that we arent constantly restarting)
-    if (connectCount > 10 && millis() > 10*60*1000) {
-      Serial.println("Reconnected too many times. Restarting");
-      delay(2000);
-      ESP.restart(); //if we have had to reconnect a bunch, just restart the controller
-    }
-  }
+  cycleThroughSolenoids();
 }
 
 void loop() {
@@ -123,26 +88,6 @@ void loop() {
 
   //even though the wifi class should auto reconnect if disconnected, im adding this here to make sure
   checkWiFiConnection();
-}
-
-void printUpdateToHomeAssistant(char* mqttMessageForBroker, bool printToSerial = true){
-  mqttClient.beginMessage("Desoto/Aero3/statusUpdate");
-  mqttClient.print(mqttMessageForBroker);
-  mqttClient.endMessage();
-
-  if (printToSerial) {
-    Serial.println(mqttMessageForBroker);
-  }
-}
-
-void printUpdateToHomeAssistant(String mqttMessageForBroker, bool printToSerial = true) {
-  mqttClient.beginMessage("Desoto/Aero3/statusUpdate");
-  mqttClient.print(mqttMessageForBroker);
-  mqttClient.endMessage();
-
-  if (printToSerial) {
-    Serial.println(mqttMessageForBroker);
-  }
 }
 
 void cycleThroughSolenoids() {
@@ -157,11 +102,11 @@ void cycleThroughSolenoids() {
   for (int count = 0; count < nbrOfSolenoids; count++) { 
     whichSolenoid = (whichSolenoidToStart + count) % nbrOfSolenoids;
     if (whichSolenoid == 0 && cycleSolenoid1 == false) {
-      Serial.println("Dont cycle solenoid 1");
+      Serial.println("Don't cycle solenoid 1");
     } else if (whichSolenoid == 1 && cycleSolenoid2 == false) {
-      Serial.println("Dont cycle solenoid 2");
+      Serial.println("Don't cycle solenoid 2");
     } else if (whichSolenoid == 2 && cycleSolenoid3 == false) {
-      Serial.println("Dont cycle solenoid 3");
+      Serial.println("Don't cycle solenoid 3");
     } else {
       digitalWrite(solenoidPins[whichSolenoid], HIGH);
       delayWhileSpraying(wateringDurations[whichSolenoid] * 1000, whichSolenoid + 1);
@@ -169,7 +114,7 @@ void cycleThroughSolenoids() {
       customDelay(1000);
     }
   }
-  whichSolenoidToStart++; //increment
+  whichSolenoidToStart++;
   whichSolenoidToStart%=nbrOfSolenoids; //wrap around if greater than nbrOfSolenoids
 }
 
@@ -182,7 +127,7 @@ void delayWhileSpraying(long timeToDelayMilli, int solenoidSpraying) {
     mqttClient.poll();  //check for mqtt messages
 
     if (!updateMessageSent) {
-      if (updateIfSpraying(solenoidSpraying)) {
+      if (updateIfSpraying(&mqttClient, solenoidSpraying)) {
         updateMessageSent = true;
         Serial.println("updateMessageSent set true");
       }
@@ -190,11 +135,11 @@ void delayWhileSpraying(long timeToDelayMilli, int solenoidSpraying) {
   }
   if (!updateMessageSent) {
     Serial.println("No spraying detected!");
-    beginMessageForSolenoidFeedback(solenoidSpraying);
+    beginMessageForSolenoidFeedback(&mqttClient, solenoidSpraying);
     mqttClient.print("No spraying detected!"); //if supposed to spray but doesn't
     mqttClient.endMessage();
   } else {
-    beginMessageForSolenoidFeedback(solenoidSpraying);
+    beginMessageForSolenoidFeedback(&mqttClient, solenoidSpraying);
     mqttClient.print("Not spraying"); //when the spraying stops
     mqttClient.endMessage();
     updateMessageSent = false;  //reset flag after delay
@@ -211,62 +156,7 @@ void customDelay(long timeToDelayMilli) {
   }
 }
 
-void beginMessageForSolenoidFeedback(int solenoidSpraying) {
-  if (solenoidSpraying == 1) {
-    mqttClient.beginMessage(sprayTopic1);
-  } else if (solenoidSpraying == 2) {
-    mqttClient.beginMessage(sprayTopic2);
-  } else if (solenoidSpraying == 3) {
-    mqttClient.beginMessage(sprayTopic3);
-  }
-}
-
-bool updateIfSpraying(int solenoidSpraying) {
-  if (digitalRead(feedbackPin)) {  //if spraying
-    beginMessageForSolenoidFeedback(solenoidSpraying);
-    mqttClient.print("Spraying");
-    mqttClient.endMessage();
-    Serial.println("mqtt message sent");
-    return true;
-  }
-  return false;
-}
-
-//TURN ON SOLENOID
-void turnOnSolenoid1() {
-  digitalWrite(solenoidPins[0], HIGH);
-}
-void turnOnSolenoid2() {
-  digitalWrite(solenoidPins[1], HIGH);
-}
-void turnOnSolenoid3() {
-  digitalWrite(solenoidPins[2], HIGH);
-}
-
-
-//TURN OFF SOLENOID
-void turnOffSolenoid1() {
-  digitalWrite(solenoidPins[0], LOW);
-}
-void turnOffSolenoid2() {
-  digitalWrite(solenoidPins[1], LOW);
-}
-void turnOffSolenoid3() {
-  digitalWrite(solenoidPins[2], LOW);
-}
-
 //MQTT
-char mqttMessage[50]; //stores mqtt message
-void readMessage() {
-  int inx = 0;
-  while (mqttClient.available()) {
-    mqttMessage[inx] = (char)mqttClient.read();
-    inx++;
-    // Serial.print((char)mqttClient.read());
-  }
-  mqttMessage[inx] = '\0';  // null terminate
-}
-
 String mqttTopic; //the mqtt topic that the controller is receiving
 bool parsingError = false;  //flag for parsing error. Either topic or message not recognized
 
@@ -275,101 +165,102 @@ void onMqttMessage(int messageSize) {
   mqttTopic = mqttClient.messageTopic();
   Serial.println();
   Serial.println("MQTT mqttTopic: " + String(mqttTopic));
+  char* mqttMessage;
 
   //SOLENOID COMMANDS
   if (mqttTopic == "Desoto/Aero3/solenoid1/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn on solenoid 1");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn on solenoid 1");
       turnOnSolenoid1();
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn off solenoid 1");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn off solenoid 1");
       turnOffSolenoid1();
     } else parsingError = true;
   } else if (mqttTopic == "Desoto/Aero3/solenoid2/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn on solenoid 2");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn on solenoid 2");
       turnOnSolenoid2();
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn off solenoid 2");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn off solenoid 2");
       turnOffSolenoid2();
     } else parsingError = true;
   } else if (mqttTopic == "Desoto/Aero3/solenoid3/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn on solenoid 3");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn on solenoid 3");
       turnOnSolenoid3();
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("Should turn off solenoid 3");
+      printUpdateToHomeAssistant(&mqttClient,"Should turn off solenoid 3");
       turnOffSolenoid3();
     } else parsingError = true;
   }
   
   //WATERING CYCLES
   else if (mqttTopic == "Desoto/Aero3/watering/solenoid1/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 1 cycle is on!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 1 cycle is on!");
       cycleSolenoid1 = true;
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 1 cycle is off!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 1 cycle is off!");
       cycleSolenoid1 = false;
     } else parsingError = true;
   } else if (mqttTopic == "Desoto/Aero3/watering/solenoid2/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 2 cycle is on!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 2 cycle is on!");
       cycleSolenoid2 = true;
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 2 cycle is off!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 2 cycle is off!");
       cycleSolenoid2 = false;
     } else parsingError = true;
   } else if (mqttTopic == "Desoto/Aero3/watering/solenoid3/command") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     if (strcmp(mqttMessage, "{\"state\":\"on\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 3 cycle is on!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 3 cycle is on!");
       cycleSolenoid3 = true;
     } else if (strcmp(mqttMessage, "{\"state\":\"off\"}") == 0) {
-      printUpdateToHomeAssistant("solenoid 3 cycle is off!");
+      printUpdateToHomeAssistant(&mqttClient,"solenoid 3 cycle is off!");
       cycleSolenoid3 = false;
     } else parsingError = true;
   }
   
   //WATERING DURATIONS
   else if (mqttTopic == "Desoto/Aero3/watering/solenoid1/duration") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     int newDuration = atoi(mqttMessage);
-    printUpdateToHomeAssistant("Updating solenoid 1 watering duration to " + String(newDuration) + " seconds");
+    printUpdateToHomeAssistant(&mqttClient,"Updating solenoid 1 watering duration to " + String(newDuration) + " seconds");
     wateringDurations[0] = newDuration;
 
   } else if (mqttTopic == "Desoto/Aero3/watering/solenoid2/duration") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     int newDuration = atoi(mqttMessage);
-    printUpdateToHomeAssistant("Updating solenoid 2 watering duration to " + String(newDuration) + " seconds");
+    printUpdateToHomeAssistant(&mqttClient,"Updating solenoid 2 watering duration to " + String(newDuration) + " seconds");
     wateringDurations[1] = newDuration;
   } else if (mqttTopic == "Desoto/Aero3/watering/solenoid3/duration") {
-    printUpdateToHomeAssistant("Should update solenoid 3 water duration");
-    readMessage();
+    printUpdateToHomeAssistant(&mqttClient,"Should update solenoid 3 water duration");
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     int newDuration = atoi(mqttMessage);
-    printUpdateToHomeAssistant("Updating solenoid 3 watering duration to " + String(newDuration) + " seconds");
+    printUpdateToHomeAssistant(&mqttClient,"Updating solenoid 3 watering duration to " + String(newDuration) + " seconds");
     wateringDurations[2] = newDuration;
   }
   
   //WATERING DELAY
   else if (mqttTopic == "Desoto/Aero3/watering/delay") {
-    readMessage();
+    mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
-    wateringDelay = atoi(mqttMessage);
-    printUpdateToHomeAssistant("Updating delay to :" + String(wateringDelay));
+    long wateringDelay = atoi(mqttMessage);
+    printUpdateToHomeAssistant(&mqttClient,"Updating delay to :" + String(wateringDelay));
     Alarm.write(wateringAlarmID, wateringDelay);
   }
 
@@ -384,17 +275,19 @@ void onMqttMessage(int messageSize) {
     Serial.println("Ignored mqttTopic");
   } else if (mqttTopic == "Desoto/Aero3/solenoid3/state") {
     Serial.println("Ignored mqttTopic");
+  }else if (mqttTopic == "Desoto/Aero3/watering/lastTriggered") {
+    Serial.println("Ignored mqttTopic");
   }
   
   else {
-    printUpdateToHomeAssistant("Update not recognized: ");
-    printUpdateToHomeAssistant(mqttTopic);
+    printUpdateToHomeAssistant(&mqttClient,"Update not recognized: ");
+    printUpdateToHomeAssistant(&mqttClient,mqttTopic);
   }
 
   //IF MESSAGE IN A mqttTopic WAS NOT RECOGNIZED
   if (parsingError) {
-    printUpdateToHomeAssistant("message not recognized for mqttTopic: " + String(mqttTopic));
-    printUpdateToHomeAssistant(" and message: " + String(mqttMessage));
+    printUpdateToHomeAssistant(&mqttClient,"message not recognized for mqttTopic: " + String(mqttTopic));
+    printUpdateToHomeAssistant(&mqttClient," and message: " + String(mqttMessage));
     parsingError = false;
   }
 
