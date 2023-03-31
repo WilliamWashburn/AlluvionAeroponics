@@ -89,15 +89,15 @@ void setup() {
   }
   if (!isTimeSet) {
     Serial.println("Failed to get time, setting to 9:00 am");
-    setTime(9, 00, 0, 6, 6, 23);  // 9am if fail to get time
+    setTime(9, 0, 0, 6, 6, 23);  // 9am if fail to get time
   }
 
   //SET ALARMS
   //ill need to get the ID of the alarm to be able to update it
-  watering1AlarmID = Alarm.alarmRepeat(9, 00, 0, waterLevels);
-  watering2AlarmID = Alarm.alarmRepeat(12, 00, 0, waterLevels);
-  watering3AlarmID = Alarm.alarmRepeat(17, 00, 0, waterLevels);
-  watering4AlarmID = Alarm.alarmRepeat(22, 00, 0, waterLevels);
+  watering1AlarmID = Alarm.alarmRepeat(9, 0, 0, waterLevels);
+  watering2AlarmID = Alarm.alarmRepeat(12, 0, 0, waterLevels);
+  watering3AlarmID = Alarm.alarmRepeat(17, 0, 0, waterLevels);
+  watering4AlarmID = Alarm.alarmRepeat(22, 0, 0, waterLevels);
 
   Alarm.timerRepeat(60, updateTime);  // every minute, publish what time we think it is
 }
