@@ -13,7 +13,7 @@ String willPayload = "Disconnected :(";
 
 char mqttMessage[50];
 
-void subscriptToTopics() {
+void subscribeToTopics() {
   Serial.print("Subscribing to topic: ");
   Serial.println(topic);
   Serial.println();
@@ -50,7 +50,7 @@ bool connectToBroker() {
   if (mqttClient.connected()) {
     Serial.println("You've reconnected!");
     updateWillTopic();
-    subscriptToTopics();
+    subscribeToTopics();
     return true;
   }
   return false;
