@@ -73,6 +73,7 @@ void setup() {
   connectToBroker(&mqttClient);
 
   printUpdateToHomeAssistant(&mqttClient,"Connected to Homeassistant!");
+  updateWillTopic(&mqttClient);
 
   //SET ALARMS
   wateringAlarmID = Alarm.timerRepeat(wateringDelay, cycleThroughSolenoids);
@@ -247,7 +248,6 @@ void onMqttMessage(int messageSize) {
     printUpdateToHomeAssistant(&mqttClient,"Updating solenoid 2 watering duration to " + String(newDuration) + " seconds");
     wateringDurations[1] = newDuration;
   } else if (mqttTopic == "Desoto/Aero3/watering/solenoid3/duration") {
-    printUpdateToHomeAssistant(&mqttClient,"Should update solenoid 3 water duration");
     mqttMessage = readMessage(&mqttClient);
     Serial.println(mqttMessage);
     int newDuration = atoi(mqttMessage);
@@ -265,7 +265,7 @@ void onMqttMessage(int messageSize) {
   }
 
   // mqttTopicS TO IGNORE
-  else if (mqttTopic == "Desoto/Aero3/willmqttTopic") {
+  else if (mqttTopic == "Desoto/Aero3/willTopic") {
     Serial.println("Ignored mqttTopic");
   } else if (mqttTopic == "Desoto/Aero3/statusUpdate") {
     Serial.println("Ignored mqttTopic");

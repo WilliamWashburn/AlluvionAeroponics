@@ -9,7 +9,7 @@
 const char* ssid = WIFI_NAME;
 const char* password = WIFI_PASS;
 const char* mqtt_pass = MQTT_PASS;
-const char whichSensor[] = "Tank_2_Pressure_Sensor";
+const char whichSensor[] = "Tank_3_Pressure_Sensor"; //change to match which row you are using
 
 #include "wifiFunctions.h"
 #include "pressureFunctions.h"

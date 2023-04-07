@@ -10,8 +10,7 @@ const char sprayTopic1[] = "Desoto/Aero3/solenoid1/state";  //for updating when 
 const char sprayTopic2[] = "Desoto/Aero3/solenoid2/state";
 const char sprayTopic3[] = "Desoto/Aero3/solenoid3/state";
 
-const char willTopic[] = "Desoto/EbbNFlow/willTopic"; //willTopic
-String willPayload = "Disconnected :("; //will Payload
+const char willTopic[] = "Desoto/Aero3/willTopic"; //willTopic
 
 int feedbackPin = 32;
 
@@ -19,10 +18,13 @@ void connectToBroker(MqttClient* mqttClient){
   Serial.print("Attempting to connect to the MQTT broker: ");
   Serial.println(broker);
   mqttClient->setUsernamePassword(mqttUser, mqttPass);
+  
   // set will message
+  String willPayload = "Disconnected :("; //will Payload
   mqttClient->beginWill(willTopic, willPayload.length(), true, 1);
   mqttClient->print(willPayload);
   mqttClient->endWill();
+
   if (!mqttClient->connect(broker, port)) {
     Serial.print("MQTT connection failed! Error code = ");
     Serial.println(mqttClient->connectError());
@@ -33,9 +35,9 @@ void connectToBroker(MqttClient* mqttClient){
     Serial.print("Subscribing to topic: ");
     Serial.println(topic);
     Serial.println();
-    // subscribe to a topic
+
+    //subscribe to topic
     mqttClient->subscribe(topic);
-    updateWillTopic(mqttClient);
   }
 }
 void updateWillTopic(MqttClient* mqttClient) {
